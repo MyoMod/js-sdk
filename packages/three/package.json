@@ -1,0 +1,13 @@
+{
+  "name": "@myomod/three",
+  "dependencies": {
+    "@myomod/core": "workspace:^"
+  },
+  "peerDependencies": {
+    "three": "*"
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "main": "dist/index.js"
+}

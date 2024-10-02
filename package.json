@@ -1,5 +1,9 @@
 {
   "devDependencies": {
-    "@types/web-bluetooth": "^0.0.20"
+    "@types/web-bluetooth": "^0.0.20",
+    "@types/three": "^0.168.0",
+    "typescript": "^5.5.4",
+    "@types/webxr": "^0.5.19",
+    "three": "^0.168.0"
   }
 }

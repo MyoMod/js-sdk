@@ -1,5 +1,5 @@
 import { Matrix4, Quaternion, Vector3 } from "three";
-import { DefaultPoseName, Pose, poses } from "./pose";
+import { DefaultPoseName, Pose, poses } from "./pose.js";
 
 export const fingerJointsMap = {
   thumb: [
