@@ -8,12 +8,11 @@ import {
   readJointMatrix,
 } from "@myomod/core";
 import { createRoot } from "react-dom/client";
-import { StrictMode, Suspense, useMemo } from "react";
+import { StrictMode, Suspense, useEffect, useMemo, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, useGLTF } from "@react-three/drei";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { Object3D } from "three";
-import { useControls } from "leva";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -22,10 +21,18 @@ createRoot(document.getElementById("root")!).render(
 );
 
 function App() {
+  const [state, setState] = useState<{
+    thumb: number;
+    index: number;
+    middle: number;
+    ring: number;
+    pinky: number;
+  }>({ index: 0.5, middle: 0.5, pinky: 0.5, ring: 0.5, thumb: 0.5 });
   return (
     <Canvas
       camera={{ near: 0.001, position: [0.25, 0, 0] }}
       style={{ position: "absolute", inset: "0", touchAction: "none" }}
+      onClick={() => readPull(setState)}
     >
       <group
         rotation-y={-Math.PI / 2}
@@ -34,7 +41,7 @@ function App() {
         position-y={-0.1}
       >
         <Suspense>
-          <Hand />
+          <Hand alphas={state} />
         </Suspense>
       </group>
       <ambientLight intensity={1} />
@@ -44,39 +51,73 @@ function App() {
   );
 }
 
+function readPull(
+  set: (value: {
+    thumb: number;
+    index: number;
+    middle: number;
+    ring: number;
+    pinky: number;
+  }) => void
+) {
+  navigator.bluetooth
+    .requestDevice({
+      acceptAllDevices: true,
+      optionalServices: ["f1f1d764-f9dc-4274-9f59-325fea6d631b"],
+    })
+    .then(async (device) => {
+      await device.gatt?.connect();
+      return device;
+    })
+    .then((device) => {
+      console.log("device", device);
+      return device.gatt?.getPrimaryService(
+        "f1f1d764-f9dc-4274-9f59-325fea6d631b"
+      );
+    })
+    .then((service) => {
+      console.log("service", service);
+      return service?.getCharacteristic("5782a59c-fca9-4213-909f-0f88517c8fae");
+    })
+    .then((characteristic) => {
+      console.log("characteristic", characteristic);
+      setInterval(
+        () =>
+          characteristic?.readValue().then((view) => {
+            if (view == null) {
+              return;
+            }
+            const thumb = view.getUint8(0) / 255;
+            const index = view.getUint8(2) / 255;
+            const middle = view.getUint8(3) / 255;
+            const ring = view.getUint8(4) / 255;
+            const pinky = view.getUint8(5) / 255;
+            set({ thumb, index, middle, ring, pinky });
+          }),
+        50
+      );
+    });
+}
+
 export const DefaultAssetBasePath =
   "https://cdn.jsdelivr.net/npm/@webxr-input-profiles/assets@1.0/dist/profiles/";
 
 const DefaultDefaultXRHandProfileId = "generic-hand";
 
-function Hand({ handedness = "left" }: { handedness?: string }) {
-  const alphas = useControls({
-    thumb: {
-      value: 0.5,
-      min: 0,
-      max: 1,
-    },
-    index: {
-      value: 0.5,
-      min: 0,
-      max: 1,
-    },
-    middle: {
-      value: 0.5,
-      min: 0,
-      max: 1,
-    },
-    ring: {
-      value: 0.5,
-      min: 0,
-      max: 1,
-    },
-    pinky: {
-      value: 0.5,
-      min: 0,
-      max: 1,
-    },
-  });
+function Hand({
+  handedness = "left",
+  alphas,
+}: {
+  handedness?: string;
+  alphas: {
+    thumb: number;
+    index: number;
+    middle: number;
+    ring: number;
+    pinky: number;
+  };
+}) {
+  console.log(alphas);
   const gltf = useGLTF(
     new URL(
       `${DefaultDefaultXRHandProfileId}/${handedness}.glb`,

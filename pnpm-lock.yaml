@@ -6,7 +6,11 @@ settings:
 
 importers:
 
-  .: {}
+  .:
+    devDependencies:
+      '@types/web-bluetooth':
+        specifier: ^0.0.20
+        version: 0.0.20
 
   examples/record-hand:
     dependencies:
@@ -71,6 +75,9 @@ importers:
       '@types/three':
         specifier: ^0.168.0
         version: 0.168.0
+      '@types/web-bluetooth':
+        specifier: ^0.0.20
+        version: 0.0.20
       leva:
         specifier: ^0.9.35
         version: 0.9.35(@types/react-dom@18.3.0)(@types/react@18.3.5)(react-dom@18.3.1)(react@18.3.1)
@@ -1368,6 +1375,9 @@ packages:
       '@webgpu/types': 0.1.44
       fflate: 0.8.2
       meshoptimizer: 0.18.1
+
+  /@types/web-bluetooth@0.0.20:
+    resolution: {integrity: sha512-g9gZnnXVq7gM7v3tJCWV/qw7w+KeOlSHAhgF9RytFyifW6AF61hdT2ucrYhPq9hLs5JIryeupHV3qGk95dH9ow==}
 
   /@types/webxr@0.5.19:
     resolution: {integrity: sha512-4hxA+NwohSgImdTSlPXEqDqqFktNgmTXQ05ff1uWam05tNGroCMp4G+4XVl6qWm1p7GQ/9oD41kAYsSssF6Mzw==}

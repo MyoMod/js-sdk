@@ -1,3 +1,5 @@
 {
-  "dependencies": {}
+  "devDependencies": {
+    "@types/web-bluetooth": "^0.0.20"
+  }
 }
