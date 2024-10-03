@@ -58,6 +58,8 @@ const recordingTimeInSeconds = 5;
 
 const colors = ["red", "green", "blue", "black", "pink", "brown"];
 
+const maxUint32 = Math.pow(2, 32) - 1;
+
 function Connected() {
   const myoMod = suspend(loadMyoMod, [loadMyoModSymbol]);
   const [state, setState] = useState<
@@ -70,26 +72,12 @@ function Connected() {
       return;
     }
     //each data entry has 32 floats (128 byte)
-    const dataList: Array<Readonly<Float32Array>> = [];
+    const dataList: Array<Readonly<Uint32Array | Float32Array>> = [];
     const startTime = performance.now();
-    const addData = (data: Float32Array) => {
+    const addData = (data: Uint32Array) => {
       dataList.push(new Float32Array([performance.now() - startTime]));
       dataList.push(data);
     };
-    const x = setInterval(
-      () =>
-        addData(
-          new Float32Array([
-            Math.random(),
-            Math.random(),
-            Math.random(),
-            Math.random(),
-            Math.random(),
-            Math.random(),
-          ])
-        ),
-      10
-    );
     const unsubscribe = myoMod.subscribeRawData(addData);
     const ref = setTimeout(() => {
       unsubscribe();
@@ -110,12 +98,12 @@ function Connected() {
               .fill(undefined)
               .map((_, i) => ({
                 time: dataList[i * 2][0],
-                channel0: dataList[i * 2 + 1][0],
-                channel1: dataList[i * 2 + 1][1],
-                channel2: dataList[i * 2 + 1][2],
-                channel3: dataList[i * 2 + 1][3],
-                channel4: dataList[i * 2 + 1][4],
-                channel5: dataList[i * 2 + 1][5],
+                channel0: dataList[i * 2 + 1][0] / maxUint32,
+                channel1: dataList[i * 2 + 1][1] / maxUint32,
+                channel2: dataList[i * 2 + 1][2] / maxUint32,
+                channel3: dataList[i * 2 + 1][3] / maxUint32,
+                channel4: dataList[i * 2 + 1][4] / maxUint32,
+                channel5: dataList[i * 2 + 1][5] / maxUint32,
               })),
           })
         )
@@ -130,7 +118,7 @@ function Connected() {
       clearTimeout(ref);
       unsubscribe();
     };
-  }, [state ,myoMod]);
+  }, [state, myoMod]);
 
   if (state.type === "recording") {
     return (
@@ -243,11 +231,12 @@ function Connected() {
               dataKey="time"
               tickFormatter={formatXAxis}
               type="number"
-              domain={[0, Math.ceil(Math.max(...state.data.map((e) => e.time)))]}
+              domain={[
+                0,
+                Math.ceil(Math.max(...state.data.map((e) => e.time))),
+              ]}
             />
-            <Tooltip 
-              labelFormatter={(label) => `Time: ${label}ms`}
-            />
+            <Tooltip labelFormatter={(label) => `Time: ${label}ms`} />
             <YAxis />
             <Legend />
             {new Array(6).fill(undefined).map((_, index) => (

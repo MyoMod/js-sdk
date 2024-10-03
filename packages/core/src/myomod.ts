@@ -67,10 +67,10 @@ export class MyoMod {
       );
     };
   }
-  subscribeRawData(fn: (data: Readonly<Float32Array>) => void): () => void {
+  subscribeRawData(fn: (data: Readonly<Uint32Array>) => void): () => void {
     const listener = (e: Event) => {
       const { value } = e.target as unknown as { value: DataView };
-      fn(new Float32Array(value.buffer));
+      fn(new Uint32Array(value.buffer));
     };
     this.rawDataCharacteristic.addEventListener(
       "characteristicvaluechanged",
