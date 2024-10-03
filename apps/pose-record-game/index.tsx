@@ -1,5 +1,5 @@
 import { createRoot } from "react-dom/client";
-import { StrictMode, Suspense, useEffect, useState } from "react";
+import { StrictMode, Suspense, useEffect, useRef, useState } from "react";
 import { loadMyoMod } from "@myomod/three";
 import { suspend } from "suspend-react";
 import "./index.css";
@@ -24,11 +24,13 @@ createRoot(document.getElementById("root")!).render(
 );
 
 function App() {
-  const [hasInteracted, setHasInteracted] = useState(false);
-  if (!hasInteracted) {
+  const [analogAmplification, setAnalogAmplification] = useState<
+    number | undefined
+  >(undefined);
+  const ref = useRef<HTMLInputElement>(null);
+  if (analogAmplification == null) {
     return (
       <div
-        onClick={() => setHasInteracted(true)}
         style={{
           position: "absolute",
           inset: 0,
@@ -37,17 +39,41 @@ function App() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
+          flexDirection: "column",
+          gap: 16,
           fontSize: 20,
-          cursor: "pointer",
         }}
       >
-        Click to Start.
+        <input style={{ fontSize: 20, padding: "6px 12px"}} type="number" placeholder="Analog Amplification" ref={ref} />
+        <button
+          style={{
+            backgroundColor: "#4CAF50",
+            border: "none",
+            color: "white",
+            padding: "10px 20px",
+            textAlign: "center",
+            textDecoration: "none",
+            display: "inline-block",
+            fontSize: "16px",
+            margin: "4px 2px",
+            cursor: "pointer",
+            borderRadius: "5px",
+          }}
+          onClick={() => {
+            if (ref.current == null || isNaN(ref.current.valueAsNumber)) {
+              return;
+            }
+            setAnalogAmplification(ref.current.valueAsNumber);
+          }}
+        >
+          Start
+        </button>
       </div>
     );
   }
   return (
     <Suspense fallback={<Connecting />}>
-      <Connected />
+      <Connected analogAmplification={analogAmplification} />
     </Suspense>
   );
 }
@@ -60,7 +86,7 @@ const colors = ["red", "green", "blue", "black", "pink", "brown"];
 
 const maxUint32 = Math.pow(2, 32) - 1;
 
-function Connected() {
+function Connected({ analogAmplification }: { analogAmplification: number }) {
   const myoMod = suspend(loadMyoMod, [loadMyoModSymbol]);
   const [state, setState] = useState<
     | { type: "recording" | "uploading" }
@@ -89,6 +115,7 @@ function Connected() {
       setState({ type: "uploading" });
       const formData = new FormData();
       formData.append("data", new Blob(dataList));
+      formData.append("analog_amplification", analogAmplification.toString());
       pb.collection("pose_recordings")
         .create(formData)
         .then(() =>
