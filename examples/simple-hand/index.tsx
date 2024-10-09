@@ -108,6 +108,7 @@ function DataVis() {
             gap: 16,
             fontSize: 14,
           }}
+          key={key}
         >
           {key}
           <input
@@ -157,7 +158,7 @@ function Hand({ myoMod }: { myoMod: MyoMod }) {
   useEffect(() => {
     model.visible = false;
     return myoMod.subscribeHandPose((pose) => {
-      useStore.setState(pose, true);
+      useStore.setState({ ...pose }, true);
       model.visible = true;
       update(pose);
     });
