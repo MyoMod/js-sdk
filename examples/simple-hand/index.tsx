@@ -19,15 +19,18 @@ createRoot(document.getElementById("root")!).render(
   </StrictMode>
 );
 
-const useStore = create<MyoModHandPose>(() => ({
-  indexFlex: 0,
-  middleFlex: 0,
-  pinkyFlex: 0,
-  ringFlex: 0,
-  thumbFlex: 0,
-  thumbOposition: 0,
-  wristFlex: 0,
-  wristRotation: 0,
+const useStore = create<{ pose: MyoModHandPose; raw: DataView }>(() => ({
+  pose: {
+    thumbFlex: 0,
+    thumbOposition: 0,
+    indexFlex: 0,
+    middleFlex: 0,
+    ringFlex: 0,
+    pinkyFlex: 0,
+    wristFlex: 0,
+    wristRotation: 0,
+  },
+  raw: new DataView(new Uint8Array(8).buffer),
 }));
 
 function App() {
@@ -100,7 +103,7 @@ function DataVis() {
         gap: 16,
       }}
     >
-      {Object.entries(data).map(([key, value]) => (
+      {Object.entries(data.pose).map(([key, value], i) => (
         <div
           style={{
             display: "flex",
@@ -119,7 +122,7 @@ function DataVis() {
             step={0.001}
             value={value}
           />
-          {value}
+          {data.raw.getUint8(i)} / 255
         </div>
       ))}
     </div>
@@ -157,8 +160,8 @@ function Hand({ myoMod }: { myoMod: MyoMod }) {
   const update = useMemo(() => createUpdateHandModel(model), [model]);
   useEffect(() => {
     model.visible = false;
-    return myoMod.subscribeHandPose((pose) => {
-      useStore.setState({ ...pose }, true);
+    return myoMod.subscribeHandPose((pose, raw) => {
+      useStore.setState({ pose, raw }, true);
       model.visible = true;
       update(pose);
     });

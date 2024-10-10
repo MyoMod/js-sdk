@@ -41,7 +41,7 @@ export class MyoMod {
     private readonly rawDataCharacteristic: BluetoothRemoteGATTCharacteristic
   ) {}
 
-  subscribeHandPose(fn: (data: Readonly<MyoModHandPose>) => void): () => void {
+  subscribeHandPose(fn: (data: Readonly<MyoModHandPose>, raw: DataView) => void): () => void {
     const listener = (e: Event) => {
       const { value } = e.target as unknown as { value: DataView };
       this.poseHelper.thumbFlex = value.getUint8(0) / 255;
@@ -52,7 +52,7 @@ export class MyoMod {
       this.poseHelper.pinkyFlex = value.getUint8(5) / 255;
       this.poseHelper.wristFlex = value.getUint8(6) / 255;
       this.poseHelper.wristRotation = value.getUint8(7) / 255;
-      fn(this.poseHelper as Readonly<MyoModHandPose>);
+      fn(this.poseHelper as Readonly<MyoModHandPose>, value);
     };
     this.handPoseCharacteristic.addEventListener(
       "characteristicvaluechanged",
@@ -67,10 +67,10 @@ export class MyoMod {
       );
     };
   }
-  subscribeRawData(fn: (data: Readonly<Uint32Array>) => void): () => void {
+  subscribeRawData(fn: (data: Readonly<Uint32Array>, raw: DataView) => void): () => void {
     const listener = (e: Event) => {
       const { value } = e.target as unknown as { value: DataView };
-      fn(new Uint32Array(value.buffer));
+      fn(new Uint32Array(value.buffer), value);
     };
     this.rawDataCharacteristic.addEventListener(
       "characteristicvaluechanged",
