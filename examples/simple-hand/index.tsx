@@ -69,14 +69,15 @@ function Connected() {
   return (
     <>
       <Canvas
-        camera={{ near: 0.001, position: [0.25, 0, 0] }}
+        camera={{ near: 0.001, position: [0, 0, 0.2] }}
         style={{ position: "absolute", inset: "0", touchAction: "none" }}
       >
         <group
-          rotation-y={-Math.PI / 2}
+          position-y={-0.08}
+          rotation-y={Math.PI / 2}
           rotation-x={Math.PI / 2}
+          rotation-z={-Math.PI}
           rotation-order="YXZ"
-          position-y={-0.1}
         >
           <Suspense fallback={null}>
             <Hand myoMod={myoMod} />

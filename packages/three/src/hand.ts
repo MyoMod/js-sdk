@@ -102,5 +102,11 @@ export function createUpdateHandModel(handModel: Object3D) {
         readJointMatrix(joint, buffer, jointMatrcies[i++]);
       }
     }
+    handModel.rotation.set(
+      (0.5 - pose.wristFlex) * Math.PI,
+      0,
+      (((0.5 - pose.wristRotation) * 182) / 180) * Math.PI,
+      "ZXY"
+    );
   };
 }
