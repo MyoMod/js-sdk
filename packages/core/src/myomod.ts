@@ -30,10 +30,12 @@ export type MyoModHandPose = {
   pinkyFlex: number;
   wristFlex: number;
   wristRotation: number;
+  counter: number;
 };
 
 export class MyoMod {
   private poseHelper: Partial<MyoModHandPose> = {};
+  private oldCounter: number = 0;
 
   constructor(
     private readonly device: BluetoothDevice,
@@ -52,6 +54,15 @@ export class MyoMod {
       this.poseHelper.pinkyFlex = value.getUint8(5) / 255;
       this.poseHelper.wristFlex = value.getUint8(6) / 255;
       this.poseHelper.wristRotation = value.getUint8(7) / 255;
+      let valueCounter = value.getUint8(8);
+      this.poseHelper.counter = valueCounter / 255;
+      if (valueCounter != (this.oldCounter + 1) % 256) {
+        console.warn(
+          `MyoMod: Counter mismatch! Expected ${this.oldCounter + 1} but got ${valueCounter}`
+        );
+      }
+      this.oldCounter = valueCounter;
+
       fn(this.poseHelper as Readonly<MyoModHandPose>, value);
     };
     this.handPoseCharacteristic.addEventListener(

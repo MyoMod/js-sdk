@@ -39,8 +39,9 @@ const useStore = create<{
     pinkyFlex: 0,
     wristFlex: 0,
     wristRotation: 0,
+    counter: 0,
   },
-  raw: new DataView(new Uint8Array(8).buffer),
+  raw: new DataView(new Uint8Array(9).buffer),
   history: [],
 }));
 
