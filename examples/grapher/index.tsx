@@ -50,15 +50,15 @@ const useStore = create<{
 }));
 
 // Helper to keep only last 10 seconds of data
-const updateHistory = (pose: MyoModHandPose, history: PoseHistory[], startTime: number | null) => {
-  const now = Date.now();
-  const updatedStartTime = startTime === null ? now : startTime;
+const updateHistory = (pose: MyoModHandPose, history: PoseHistory[], packetCount: number | null) => {
+  const updatedCount = packetCount === null ? 0 : packetCount + 1;
+  const now = updatedCount * 10;
   
   const newHistory = [
     ...history.filter(item => now - item.timestamp < 10000),
     { timestamp: now, values: { ...pose } }
   ];
-  return { history: newHistory, startTime: updatedStartTime };
+  return { history: newHistory, startTime: updatedCount };
 };
 
 function App() {
@@ -242,11 +242,9 @@ function Chart() {
   useEffect(() => {
     if (!uPlotRef.current || history.length === 0 || startTime === null) return;
     
-    const now = Date.now();
-    const timeWindow = 10000; // 10 seconds window
     
     // Only show data from the last 10 seconds
-    const recentHistory = history.filter(point => now - point.timestamp < timeWindow);
+    const recentHistory = history;
     
     if (recentHistory.length < 2) return;
     
