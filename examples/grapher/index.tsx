@@ -115,12 +115,13 @@ function Connected() {
         <directionalLight intensity={10} position={[0, 1, 1]} />
         <OrbitControls enablePan={false} />
       </Canvas>
-      <DataVis />
+      <Chart />
+      <DataSliders />
     </>
   );
 }
 
-function DataVis() {
+function DataSliders() {
   const data = useStore();
   return (
     <div
@@ -160,7 +161,6 @@ function DataVis() {
           </div>
         ))}
       </div>
-      <Chart />
     </div>
   );
 }
@@ -296,18 +296,8 @@ function Connecting() {
   );
 }
 
-const loadHandModelSymbol = Symbol("loadHandModel");
-
 function Hand({ myoMod }: { myoMod: MyoMod }) {
-  const model = suspend(loadHandModel, [
-    "left",
-    undefined,
-    undefined,
-    loadHandModelSymbol,
-  ]);
-  const update = useMemo(() => createUpdateHandModel(model), [model]);
   useEffect(() => {
-    model.visible = false;
     return myoMod.subscribeHandPose((pose, raw) => {
       useStore.setState(state => {
         const { history, startTime } = updateHistory(pose, state.history, state.startTime);
@@ -318,9 +308,7 @@ function Hand({ myoMod }: { myoMod: MyoMod }) {
           startTime
         }
       }, true);
-      model.visible = true;
-      update(pose);
     });
-  }, [model, update, myoMod]);
-  return <primitive object={model} />;
+  }, [myoMod]);
+  //return <primitive object={model} />;
 }
