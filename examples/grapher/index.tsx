@@ -156,6 +156,7 @@ function DataSliders() {
               max={1}
               step={0.001}
               value={value}
+              readOnly={true}
             />
             <span style={{ minWidth: "50px" }}>{data.raw.getUint8(i)}/255</span>
           </div>
@@ -180,7 +181,7 @@ function Chart() {
     const initialWidth = Math.max(window.innerWidth - 40, 600);
     const initialHeight = Math.max(Math.min(window.innerHeight * 0.6, 600), 300);
     
-    const opts = {
+    const opts: uPlot.Options = {
       width: initialWidth,
       height: initialHeight,
       scales: {
@@ -208,7 +209,7 @@ function Chart() {
     };
     
     // Initialize with empty data
-    const initialData = [
+    const initialData: uPlot.AlignedData = [
       [], // timestamps
       [], [], [], [], [], [], [], [], // sensor values
     ];
@@ -243,15 +244,15 @@ function Chart() {
     if (!uPlotRef.current || history.length === 0 || startTime === null) return;
     
     
-    // Only show data from the last 10 seconds
-    const recentHistory = history;
+    // Only show every 10th point for performance
+    const recentHistory = history.filter((_, index) => index % 3 === 0);
     
     if (recentHistory.length < 2) return;
     
     // Convert timestamps to seconds since start
     const timestamps = recentHistory.map(point => (point.timestamp - startTime) / 1000);
     
-    const data = [
+    const data: uPlot.AlignedData = [
       timestamps,
       recentHistory.map(p => p.values.thumbFlex || 0),
       recentHistory.map(p => p.values.indexFlex || 0),
@@ -308,5 +309,5 @@ function Hand({ myoMod }: { myoMod: MyoMod }) {
       }, true);
     });
   }, [myoMod]);
-  //return <primitive object={model} />;
+  return " ";
 }

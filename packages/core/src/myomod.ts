@@ -18,6 +18,7 @@ export async function loadMyoMod(): Promise<MyoMod> {
     service.getCharacteristic("5782a59c-fca9-4213-909f-0f88517c8fae"),
     service.getCharacteristic("9c54ed76-847e-4d51-84be-7cf02794de53"),
   ]);
+
   return new MyoMod(device, handPoseCharacteristic, rawDataCharacteristic);
 }
 
@@ -35,7 +36,7 @@ export type MyoModHandPose = {
 
 export class MyoMod {
   private poseHelper: Partial<MyoModHandPose> = {};
-  private oldCounter: number = 0;
+  private oldCounter: number = -1;
 
   constructor(
     private readonly device: BluetoothDevice,
@@ -43,7 +44,7 @@ export class MyoMod {
     private readonly rawDataCharacteristic: BluetoothRemoteGATTCharacteristic
   ) {}
 
-  subscribeHandPose(fn: (data: Readonly<MyoModHandPose>, raw: DataView) => void): () => void {
+  subscribeHandPose(callback: (data: Readonly<MyoModHandPose>, raw: DataView) => void): () => void {
     const listener = (e: Event) => {
       const { value } = e.target as unknown as { value: DataView };
       this.poseHelper.thumbFlex = value.getUint8(0) / 255;
@@ -56,14 +57,14 @@ export class MyoMod {
       this.poseHelper.wristRotation = value.getUint8(7) / 255;
       let valueCounter = value.getUint8(8);
       this.poseHelper.counter = valueCounter / 255;
-      if (valueCounter != (this.oldCounter + 1) % 256) {
+      if (valueCounter != (this.oldCounter + 1) % 256 && this.oldCounter != -1) {
         console.warn(
           `MyoMod: Counter mismatch! Expected ${this.oldCounter + 1} but got ${valueCounter}`
         );
       }
       this.oldCounter = valueCounter;
 
-      fn(this.poseHelper as Readonly<MyoModHandPose>, value);
+      callback(this.poseHelper as Readonly<MyoModHandPose>, value);
     };
     this.handPoseCharacteristic.addEventListener(
       "characteristicvaluechanged",
@@ -81,7 +82,7 @@ export class MyoMod {
   subscribeRawData(fn: (data: Readonly<Uint32Array>, raw: DataView) => void): () => void {
     const listener = (e: Event) => {
       const { value } = e.target as unknown as { value: DataView };
-      fn(new Uint32Array(value.buffer), value);
+      //fn(new Uint32Array(value.buffer), value);
     };
     this.rawDataCharacteristic.addEventListener(
       "characteristicvaluechanged",
