@@ -14,12 +14,12 @@ export async function loadMyoMod(): Promise<MyoMod> {
   const service = await device.gatt.getPrimaryService(
     "f1f1d764-f9dc-4274-9f59-325fea6d631b"
   );
-  const [handPoseCharacteristic, rawDataCharacteristic] = await Promise.all([
+  const [handPoseCharacteristic, emgDataCharacteristic] = await Promise.all([
     service.getCharacteristic("5782a59c-fca9-4213-909f-0f88517c8fae"),
     service.getCharacteristic("9c54ed76-847e-4d51-84be-7cf02794de53"),
   ]);
 
-  return new MyoMod(device, handPoseCharacteristic, rawDataCharacteristic);
+  return new MyoMod(device, handPoseCharacteristic, emgDataCharacteristic);
 }
 
 export type MyoModHandPose = {
@@ -34,6 +34,15 @@ export type MyoModHandPose = {
   counter: number;
 };
 
+export type MyoModEmgData = {
+  chnA: Float32Array;
+  chnB: Float32Array;
+  chnC: Float32Array;
+  chnD: Float32Array;
+  chnE: Float32Array;
+  chnF: Float32Array;
+};
+
 export class MyoMod {
   private poseHelper: Partial<MyoModHandPose> = {};
   private oldCounter: number = -1;
@@ -41,7 +50,7 @@ export class MyoMod {
   constructor(
     private readonly device: BluetoothDevice,
     private readonly handPoseCharacteristic: BluetoothRemoteGATTCharacteristic,
-    private readonly rawDataCharacteristic: BluetoothRemoteGATTCharacteristic
+    private readonly emgDataCharacteristic: BluetoothRemoteGATTCharacteristic
   ) {}
 
   subscribeHandPose(callback: (data: Readonly<MyoModHandPose>, raw: DataView) => void): () => void {
@@ -79,24 +88,57 @@ export class MyoMod {
       );
     };
   }
-  subscribeRawData(fn: (data: Readonly<Uint32Array>, raw: DataView) => void): () => void {
+
+  subscribeEmgData(callback: (data: Readonly<MyoModEmgData>, counter: number, raw: DataView) => void): () => void {
+    const emgHelper: MyoModEmgData = {
+      chnA: new Float32Array(15),
+      chnB: new Float32Array(15),
+      chnC: new Float32Array(15),
+      chnD: new Float32Array(15),
+      chnE: new Float32Array(15),
+      chnF: new Float32Array(15),
+    };
+    
     const listener = (e: Event) => {
       const { value } = e.target as unknown as { value: DataView };
-      //fn(new Uint32Array(value.buffer), value);
+
+      // The last byte is a one-byte counter
+      const counter = value.getUint8(value.byteLength - 1);
+
+      // Get the EMG data (excluding the counter byte)
+      const dataSize = 15; // 15 samples per channel
+      const numChannels = 6; // 6 channels (A-F)
+      
+      for (let ch = 0; ch < numChannels; ch++) {
+        const channelArray = ch === 0 ? emgHelper.chnA :
+                            ch === 1 ? emgHelper.chnB :
+                            ch === 2 ? emgHelper.chnC :
+                            ch === 3 ? emgHelper.chnD :
+                            ch === 4 ? emgHelper.chnE : emgHelper.chnF;
+                            
+        for (let i = 0; i < dataSize; i++) {
+          const byteOffset = (ch * dataSize + i) * 4; // 4 bytes per float
+          channelArray[i] = value.getFloat32(byteOffset, true); // true for little endian
+        }
+      }
+
+      callback(emgHelper as Readonly<MyoModEmgData>, counter, value);
     };
-    this.rawDataCharacteristic.addEventListener(
+    
+    this.emgDataCharacteristic.addEventListener(
       "characteristicvaluechanged",
       listener
     );
-    this.rawDataCharacteristic.startNotifications();
+    this.emgDataCharacteristic.startNotifications();
     return () => {
-      this.rawDataCharacteristic.stopNotifications();
-      this.rawDataCharacteristic.removeEventListener(
+      this.emgDataCharacteristic.stopNotifications();
+      this.emgDataCharacteristic.removeEventListener(
         "characteristicvaluechanged",
         listener
       );
     };
   }
+
   destroy(): void {
     this.device.gatt?.disconnect();
   }
