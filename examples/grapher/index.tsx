@@ -9,6 +9,7 @@ import {
   loadMyoMod,
   MyoMod,
   MyoModHandPose,
+  MyoModEmgData,
 } from "@myomod/three";
 import { suspend } from "suspend-react";
 import uPlot from "uplot";
@@ -27,11 +28,17 @@ type PoseHistory = {
   values: Record<string, number>;
 };
 
-const useStore = create<{ 
+type EmgHistory = {
+  timestamp: number;
+  values: Record<string, Float32Array>;
+  rawCounter: number;
+};
+
+const usePoseStore = create<{ 
   pose: MyoModHandPose; 
   raw: DataView;
   history: PoseHistory[];
-  startTime: number | null;
+  packetCount: number | null;
 }>(() => ({
   pose: {
     thumbFlex: 0,
@@ -46,11 +53,31 @@ const useStore = create<{
   },
   raw: new DataView(new Uint8Array(9).buffer),
   history: [],
-  startTime: null,
+  packetCount: null,
+}));
+
+const useEmgStore = create<{
+  emg: MyoModEmgData;
+  raw: DataView;
+  history: EmgHistory[];
+  packetCount: number | null;
+
+}>(() => ({
+  emg: {
+    chnA: new Float32Array(15),
+    chnB: new Float32Array(15),
+    chnC: new Float32Array(15),
+    chnD: new Float32Array(15),
+    chnE: new Float32Array(15),
+    chnF: new Float32Array(15),
+  },
+  raw: new DataView(new Uint8Array(15*6*4+1).buffer),
+  history: [],
+  packetCount: null,
 }));
 
 // Helper to keep only last 10 seconds of data
-const updateHistory = (pose: MyoModHandPose, history: PoseHistory[], packetCount: number | null) => {
+const updatePoseHistory = (pose: MyoModHandPose, history: PoseHistory[], packetCount: number | null) => {
   const updatedCount = packetCount === null ? 0 : packetCount + 1;
   const now = updatedCount * 10;
   
@@ -58,7 +85,18 @@ const updateHistory = (pose: MyoModHandPose, history: PoseHistory[], packetCount
     ...history.filter(item => now - item.timestamp < 10000),
     { timestamp: now, values: { ...pose } }
   ];
-  return { history: newHistory, startTime: updatedCount };
+  return { history: newHistory, packetCount: updatedCount };
+};
+
+const updateEmgHistory = (emg: MyoModEmgData, rawCounter: number, history: EmgHistory[], packetCount: number | null) => {
+  const updatedCount = packetCount === null ? 0 : packetCount + 1;
+  const now = updatedCount * 10;
+  
+  const newHistory = [
+    ...history.filter(item => now - item.timestamp < 10000),
+    { timestamp: now, values: { ...emg }, rawCounter }
+  ];
+  return { history: newHistory, packetCount: updatedCount };
 };
 
 function App() {
@@ -107,22 +145,26 @@ function Connected() {
           rotation-z={-Math.PI}
           rotation-order="YXZ"
         >
-          <Suspense fallback={null}>
-            <Hand myoMod={myoMod} />
-          </Suspense>
+        <Suspense fallback={null}>
+          <Hand myoMod={myoMod} />
+        </Suspense>
+          
         </group>
         <ambientLight intensity={1} />
         <directionalLight intensity={10} position={[0, 1, 1]} />
         <OrbitControls enablePan={false} />
       </Canvas>
-      <Chart />
+      <div style={{ position: "absolute", width: "100%", top: "50%", display: "flex", flexDirection: "column", gap: "20px" }}>
+        <Chart />
+        <EmgChart />
+      </div>
       <DataSliders />
     </>
   );
 }
 
 function DataSliders() {
-  const data = useStore();
+  const data = usePoseStore();
   return (
     <div
       style={{
@@ -167,7 +209,7 @@ function DataSliders() {
 }
 
 function Chart() {
-  const { history, startTime } = useStore();
+  const { history, packetCount } = usePoseStore();
   const chartRef = useRef<HTMLDivElement>(null);
   const uPlotRef = useRef<uPlot | null>(null);
   
@@ -175,11 +217,11 @@ function Chart() {
   useEffect(() => {
     if (!chartRef.current || uPlotRef.current) return;
     
-    console.log("Creating uPlot instance");
+    console.log("Creating uPlot instance for pose data");
     
     // Calculate initial dimensions based on window size
     const initialWidth = Math.max(window.innerWidth - 40, 600);
-    const initialHeight = Math.max(Math.min(window.innerHeight * 0.6, 600), 300);
+    const initialHeight = Math.max(Math.min(window.innerHeight * 0.3, 300), 200);
     
     const opts: uPlot.Options = {
       width: initialWidth,
@@ -221,7 +263,7 @@ function Chart() {
       if (uPlotRef.current && chartRef.current) {
         // Use almost full window width and a good portion of height
         const width = Math.max(window.innerWidth - 40, 600);
-        const height = Math.max(Math.min(window.innerHeight * 0.6, 600), 300);
+        const height = Math.max(Math.min(window.innerHeight * 0.3, 300), 200);
         uPlotRef.current.setSize({ width, height });
       }
     };
@@ -241,16 +283,15 @@ function Chart() {
   
   // Separate effect to update data when history changes
   useEffect(() => {
-    if (!uPlotRef.current || history.length === 0 || startTime === null) return;
+    if (!uPlotRef.current || history.length === 0 || packetCount === null) return;
     
-    
-    // Only show every 10th point for performance
-    const recentHistory = history.filter((_, index) => index % 3 === 0);
+    // Only show every 5th point for better performance
+    const recentHistory = history.filter((_, index) => index % 5 === 0);
     
     if (recentHistory.length < 2) return;
     
     // Convert timestamps to seconds since start
-    const timestamps = recentHistory.map(point => (point.timestamp - startTime) / 1000);
+    const timestamps = recentHistory.map(point => (point.timestamp - packetCount) / 1000);
     
     const data: uPlot.AlignedData = [
       timestamps,
@@ -266,11 +307,112 @@ function Chart() {
     
     // Update plot data
     uPlotRef.current.setData(data);
-  }, [history, startTime]);
+  }, [history, packetCount]);
   
   return (
     <div style={{ marginTop: 10, width: '100%' }}>
-      <div style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 8 }}>Real-time Sensor Data:</div>
+      <div style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 8 }}>Hand Pose Data:</div>
+      <div ref={chartRef} style={{ margin: '0 auto' }} />
+    </div>
+  );
+}
+
+function EmgChart() {
+  const { history, packetCount } = useEmgStore();
+  const chartRef = useRef<HTMLDivElement>(null);
+  const uPlotRef = useRef<uPlot | null>(null);
+  
+  useEffect(() => {
+    if (!chartRef.current || uPlotRef.current) return;
+    
+    console.log("Creating uPlot instance for EMG data");
+    
+    const initialWidth = Math.max(window.innerWidth - 40, 600);
+    const initialHeight = Math.max(Math.min(window.innerHeight * 0.3, 300), 200);
+    
+    const opts: uPlot.Options = {
+      width: initialWidth,
+      height: initialHeight,
+      scales: {
+        x: {
+          time: false,
+        },
+        y: {
+          auto: true,
+        }
+      },
+      legend: {
+        show: true,
+      },
+      series: [
+        { label: "Time (s)", value: (self: any, rawValue: number | null) => rawValue == null ? '0.00' : rawValue.toFixed(2) },
+        { label: "Channel A", stroke: "red", width: 1 },
+        { label: "Channel B", stroke: "blue", width: 1 },
+        { label: "Channel C", stroke: "green", width: 1 },
+        { label: "Channel D", stroke: "orange", width: 1 },
+        { label: "Channel E", stroke: "purple", width: 1 },
+        { label: "Channel F", stroke: "cyan", width: 1 },
+        { label: "Counter", stroke: "black", width: 1, value: (self: any, rawValue: number | null) => rawValue == null ? '0.00' : rawValue.toFixed(2) },
+      ]
+    };
+    
+    const initialData: uPlot.AlignedData = [
+      [], // timestamps
+      [], [], [], [], [], [], // EMG channels
+      [], // counter
+    ];
+    
+    uPlotRef.current = new uPlot(opts, initialData, chartRef.current);
+    
+    const handleResize = () => {
+      if (uPlotRef.current && chartRef.current) {
+        const width = Math.max(window.innerWidth - 40, 600);
+        const height = Math.max(Math.min(window.innerHeight * 0.3, 300), 200);
+        uPlotRef.current.setSize({ width, height });
+      }
+    };
+    
+    window.addEventListener('resize', handleResize);
+    handleResize();
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (uPlotRef.current) {
+        uPlotRef.current.destroy();
+        uPlotRef.current = null;
+      }
+    };
+  }, []);
+  
+  useEffect(() => {
+    if (!uPlotRef.current || history.length === 0 || packetCount === null) return;
+    
+    // Only show every 10th point for better performance
+    const recentHistory = history.filter((_, index) => index % 10 === 0);
+    
+    if (recentHistory.length < 2) return;
+    
+    // For each history item, we'll pick the first value from each channel
+    const timestamps = recentHistory.map(point => (point.timestamp - packetCount) / 1000);
+    
+    // Process EMG data - for simplicity, just take the first sample from each channel's array
+    const data: uPlot.AlignedData = [
+      timestamps,
+      recentHistory.map(p => p.values.chnA ? p.values.chnA[0] : 0),
+      recentHistory.map(p => p.values.chnB ? p.values.chnB[0] : 0),
+      recentHistory.map(p => p.values.chnC ? p.values.chnC[0] : 0),
+      recentHistory.map(p => p.values.chnD ? p.values.chnD[0] : 0),
+      recentHistory.map(p => p.values.chnE ? p.values.chnE[0] : 0),
+      recentHistory.map(p => p.values.chnF ? p.values.chnF[0] : 0),
+      recentHistory.map(p => p.rawCounter || 0),
+    ];
+    
+    uPlotRef.current.setData(data);
+  }, [history, packetCount]);
+  
+  return (
+    <div style={{ marginTop: 10, width: '100%' }}>
+      <div style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 8 }}>EMG Data:</div>
       <div ref={chartRef} style={{ margin: '0 auto' }} />
     </div>
   );
@@ -297,17 +439,35 @@ function Connecting() {
 
 function Hand({ myoMod }: { myoMod: MyoMod }) {
   useEffect(() => {
-    return myoMod.subscribeHandPose((pose, raw) => {
-      useStore.setState(state => {
-        const { history, startTime } = updateHistory(pose, state.history, state.startTime);
+    const poseUnsubscribe = myoMod.subscribeHandPose((pose, raw) => {
+      usePoseStore.setState(state => {
+        const { history, packetCount } = updatePoseHistory(pose, state.history, state.packetCount);
         return { 
           pose, 
           raw, 
           history,
-          startTime
+          packetCount
         }
       }, true);
     });
+    
+    const emgUnsubscribe = myoMod.subscribeEmgData((emg, counter, raw) => {
+      useEmgStore.setState(state => {
+        const { history, packetCount } = updateEmgHistory(emg, counter, state.history, state.packetCount);
+        return {
+          emg,
+          raw,
+          history,
+          packetCount
+        }
+      }, true);
+    });
+    
+    return () => {
+      poseUnsubscribe();
+      emgUnsubscribe();
+    };
   }, [myoMod]);
-  return " ";
+  
+  return null;
 }
