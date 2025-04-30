@@ -1,3 +1,7 @@
 * {
     font-family: Arial, Helvetica, sans-serif;
 }
+
+.u-legend .u-value {
+    min-width: 70px !important;
+}
