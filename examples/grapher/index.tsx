@@ -15,6 +15,24 @@ import { suspend } from "suspend-react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import "./index.css";
+// Create a component to inject CSS styles
+function StylesInjector() {
+  useEffect(() => {
+    const styleElement = document.createElement('style');
+    styleElement.textContent = `
+      .u-legend .u-value {
+        min-width: 80px !important;
+      }
+    `;
+    document.head.appendChild(styleElement);
+    
+    return () => {
+      document.head.removeChild(styleElement);
+    };
+  }, []);
+  
+  return null;
+}
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -132,6 +150,7 @@ function App() {
   }
   return (
     <Suspense fallback={<Connecting />}>
+      <StylesInjector />
       <Connected />
     </Suspense>
   );
