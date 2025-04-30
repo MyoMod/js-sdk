@@ -61,7 +61,6 @@ const useEmgStore = create<{
   raw: DataView;
   history: EmgHistory[];
   packetCount: number | null;
-
 }>(() => ({
   emg: {
     chnA: new Float32Array(15),
@@ -92,9 +91,19 @@ const updateEmgHistory = (emg: MyoModEmgData, rawCounter: number, history: EmgHi
   const updatedCount = packetCount === null ? 0 : packetCount + 1;
   const now = updatedCount * 10;
   
+  // Create deep copies of all Float32Arrays
+  const emgDeepCopy: Record<string, Float32Array> = {
+    chnA: new Float32Array(emg.chnA),
+    chnB: new Float32Array(emg.chnB),
+    chnC: new Float32Array(emg.chnC),
+    chnD: new Float32Array(emg.chnD),
+    chnE: new Float32Array(emg.chnE),
+    chnF: new Float32Array(emg.chnF),
+  };
+  
   const newHistory = [
     ...history.filter(item => now - item.timestamp < 10000),
-    { timestamp: now, values: { ...emg }, rawCounter }
+    { timestamp: now, values: emgDeepCopy, rawCounter }
   ];
   return { history: newHistory, packetCount: updatedCount };
 };
@@ -132,6 +141,10 @@ const loadMyoModSymbol = Symbol("loadMyoMod");
 
 function Connected() {
   const myoMod = suspend(loadMyoMod, [loadMyoModSymbol]);
+  // Create sampling rate states at app level to share them
+  const [poseSamplingRate, setPoseSamplingRate] = useState(5);
+  const [emgSamplingRate, setEmgSamplingRate] = useState(1);
+  
   return (
     <>
       <Canvas
@@ -154,12 +167,72 @@ function Connected() {
         <directionalLight intensity={10} position={[0, 1, 1]} />
         <OrbitControls enablePan={false} />
       </Canvas>
-      <div style={{ position: "absolute", width: "100%", top: "50%", display: "flex", flexDirection: "column", gap: "20px" }}>
-        <Chart />
-        <EmgChart />
+      <div style={{ position: "absolute", width: "100%", top: "10%", display: "flex", flexDirection: "column", gap: "20px" }}>
+        <Chart samplingRate={poseSamplingRate} />
+        <EmgChart samplingRate={emgSamplingRate} />
       </div>
       <DataSliders />
+      <SamplingControls 
+        poseSamplingRate={poseSamplingRate}
+        setPoseSamplingRate={setPoseSamplingRate}
+        emgSamplingRate={emgSamplingRate}
+        setEmgSamplingRate={setEmgSamplingRate}
+      />
     </>
+  );
+}
+
+function SamplingControls({
+  poseSamplingRate,
+  setPoseSamplingRate,
+  emgSamplingRate,
+  setEmgSamplingRate
+}: {
+  poseSamplingRate: number;
+  setPoseSamplingRate: (value: number) => void;
+  emgSamplingRate: number;
+  setEmgSamplingRate: (value: number) => void;
+}) {
+  return (
+    <div style={{
+      position: "absolute",
+      bottom: "10px",
+      right: "10px",
+      background: "rgba(255,255,255,0.8)",
+      padding: "10px",
+      borderRadius: "5px",
+      zIndex: 10,
+      boxShadow: "0 0 5px rgba(0,0,0,0.2)"
+    }}>
+      <div style={{ marginBottom: "10px" }}>
+        <div style={{ fontSize: "14px", marginBottom: "5px" }}>
+          Pose sampling: every {poseSamplingRate}th point
+        </div>
+        <input
+          type="range"
+          min="1"
+          max="20"
+          step="1"
+          value={poseSamplingRate}
+          onChange={(e) => setPoseSamplingRate(parseInt(e.target.value))}
+          style={{ width: "200px" }}
+        />
+      </div>
+      <div>
+        <div style={{ fontSize: "14px", marginBottom: "5px" }}>
+          EMG sampling: every {emgSamplingRate}th point
+        </div>
+        <input
+          type="range"
+          min="1"
+          max="50"
+          step="1"
+          value={emgSamplingRate}
+          onChange={(e) => setEmgSamplingRate(parseInt(e.target.value))}
+          style={{ width: "200px" }}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -208,7 +281,7 @@ function DataSliders() {
   );
 }
 
-function Chart() {
+function Chart({ samplingRate }: { samplingRate: number }) {
   const { history, packetCount } = usePoseStore();
   const chartRef = useRef<HTMLDivElement>(null);
   const uPlotRef = useRef<uPlot | null>(null);
@@ -285,8 +358,8 @@ function Chart() {
   useEffect(() => {
     if (!uPlotRef.current || history.length === 0 || packetCount === null) return;
     
-    // Only show every 5th point for better performance
-    const recentHistory = history.filter((_, index) => index % 5 === 0);
+    // Use the adjustable sampling rate passed as prop
+    const recentHistory = history.filter((_, index) => index % samplingRate === 0);
     
     if (recentHistory.length < 2) return;
     
@@ -307,7 +380,7 @@ function Chart() {
     
     // Update plot data
     uPlotRef.current.setData(data);
-  }, [history, packetCount]);
+  }, [history, packetCount, samplingRate]); // Keep samplingRate in dependencies
   
   return (
     <div style={{ marginTop: 10, width: '100%' }}>
@@ -317,7 +390,7 @@ function Chart() {
   );
 }
 
-function EmgChart() {
+function EmgChart({ samplingRate }: { samplingRate: number }) {
   const { history, packetCount } = useEmgStore();
   const chartRef = useRef<HTMLDivElement>(null);
   const uPlotRef = useRef<uPlot | null>(null);
@@ -387,8 +460,8 @@ function EmgChart() {
   useEffect(() => {
     if (!uPlotRef.current || history.length === 0 || packetCount === null) return;
     
-    // Only show every 10th point for better performance
-    const recentHistory = history.filter((_, index) => index % 10 === 0);
+    // Use the adjustable sampling rate passed as prop
+    const recentHistory = history.filter((_, index) => index % samplingRate === 0);
     
     if (recentHistory.length < 2) return;
     
@@ -408,7 +481,7 @@ function EmgChart() {
     ];
     
     uPlotRef.current.setData(data);
-  }, [history, packetCount]);
+  }, [history, packetCount, samplingRate]); // Keep samplingRate in dependencies
   
   return (
     <div style={{ marginTop: 10, width: '100%' }}>
