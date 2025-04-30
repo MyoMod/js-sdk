@@ -95,17 +95,16 @@ const useEmgStore = create<{
   packetCount: null,
 }));
 
-// Helper to keep all data for history but filter for display
+// Helper functions that efficiently update history data
 const updatePoseHistory = (pose: MyoModHandPose, history: PoseHistory[], packetCount: number | null) => {
   const updatedCount = packetCount === null ? 0 : packetCount + 1;
   const now = updatedCount * 10;
   
-  // Add new data point without filtering
-  const newHistory = [
-    ...history,
-    { timestamp: now, values: { ...pose } }
-  ];
-  return { history: newHistory, packetCount: updatedCount };
+  // More efficient approach: push to existing array when possible
+  // This avoids recreating the entire array each time
+  history.push({ timestamp: now, values: { ...pose } });
+  
+  return { history, packetCount: updatedCount };
 };
 
 const updateEmgHistory = (emg: MyoModEmgData, rawCounter: number, history: EmgHistory[], packetCount: number | null) => {
@@ -122,12 +121,10 @@ const updateEmgHistory = (emg: MyoModEmgData, rawCounter: number, history: EmgHi
     chnF: new Float32Array(emg.chnF),
   };
   
-  // Add new data point without filtering
-  const newHistory = [
-    ...history,
-    { timestamp: now, values: emgDeepCopy, rawCounter }
-  ];
-  return { history: newHistory, packetCount: updatedCount };
+  // Push directly to the existing array
+  history.push({ timestamp: now, values: emgDeepCopy, rawCounter });
+  
+  return { history, packetCount: updatedCount };
 };
 
 function App() {
@@ -621,7 +618,9 @@ function Hand({ myoMod }: { myoMod: MyoMod }) {
   useEffect(() => {
     const poseUnsubscribe = myoMod.subscribeHandPose((pose, raw) => {
       usePoseStore.setState(state => {
-        const { history, packetCount } = updatePoseHistory(pose, state.history, state.packetCount);
+        // Create a shallow copy to trigger state update while reusing the array contents
+        const historyCopy = [...state.history];
+        const { history, packetCount } = updatePoseHistory(pose, historyCopy, state.packetCount);
         return { 
           pose, 
           raw, 
@@ -633,7 +632,9 @@ function Hand({ myoMod }: { myoMod: MyoMod }) {
     
     const emgUnsubscribe = myoMod.subscribeEmgData((emg, counter, raw) => {
       useEmgStore.setState(state => {
-        const { history, packetCount } = updateEmgHistory(emg, counter, state.history, state.packetCount);
+        // Create a shallow copy to trigger state update while reusing the array contents
+        const historyCopy = [...state.history];
+        const { history, packetCount } = updateEmgHistory(emg, counter, historyCopy, state.packetCount);
         return {
           emg,
           raw,
