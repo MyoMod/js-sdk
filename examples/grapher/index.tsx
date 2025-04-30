@@ -15,6 +15,8 @@ import { suspend } from "suspend-react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import "./index.css";
+import { round } from "three/webgpu";
+
 // Create a component to inject CSS styles
 function StylesInjector() {
   useEffect(() => {
@@ -321,6 +323,10 @@ function Chart({ samplingRate }: { samplingRate: number }) {
       scales: {
         x: {
           time: false,
+          // Set default range to show last 10 seconds of data
+          range: [-10, 0],
+          // Keep 0 (the present) at the right edge
+          auto: false
         },
         y: {
           range: [0, 1]
@@ -337,8 +343,8 @@ function Chart({ samplingRate }: { samplingRate: number }) {
         { label: "ringFlex", stroke: "orange", width: 2 },
         { label: "pinkyFlex", stroke: "purple", width: 2 },
         { label: "wristFlex", stroke: "cyan", width: 2 },
-        { label: "wristRotation", stroke: "magenta", width: 2 },
-        { label: "counter", stroke: "black", width: 2, value: (self: any, rawValue: number | null) => rawValue == null ? '0.00' : rawValue.toFixed(2), },
+        { label: "wristRotation", stroke: "magenta", width: 2},
+        { label: "counter", stroke: "black", width: 2, value: (self: any, rawValue: number | null) => rawValue == null ? '0.00' : rawValue.toFixed(2), "show": false },
       ]
     };
     
@@ -382,8 +388,11 @@ function Chart({ samplingRate }: { samplingRate: number }) {
     
     if (recentHistory.length < 2) return;
     
-    // Convert timestamps to seconds since start
-    const timestamps = recentHistory.map(point => (point.timestamp - packetCount) / 1000);
+    // Find the most recent timestamp
+    const latestTime = Math.max(...recentHistory.map(p => p.timestamp));
+    
+    // Convert timestamps to negative seconds relative to the present (0)
+    const timestamps = recentHistory.map(point => (point.timestamp - latestTime) / 1000);
     
     const data: uPlot.AlignedData = [
       timestamps,
@@ -428,6 +437,10 @@ function EmgChart({ samplingRate }: { samplingRate: number }) {
       scales: {
         x: {
           time: false,
+          // Set default range to show last 10 seconds of data
+          range: [-10, 0],
+          // Keep 0 (the present) at the right edge
+          auto: false
         },
         y: {
           auto: true,
@@ -444,7 +457,7 @@ function EmgChart({ samplingRate }: { samplingRate: number }) {
         { label: "Channel D", stroke: "orange", width: 1 },
         { label: "Channel E", stroke: "purple", width: 1 },
         { label: "Channel F", stroke: "cyan", width: 1 },
-        { label: "Counter", stroke: "black", width: 1, value: (self: any, rawValue: number | null) => rawValue == null ? '0.00' : rawValue.toFixed(2) },
+        { label: "Counter", stroke: "black", width: 1, "show": false  },
       ]
     };
     
@@ -480,22 +493,27 @@ function EmgChart({ samplingRate }: { samplingRate: number }) {
     if (!uPlotRef.current || history.length === 0 || packetCount === null) return;
     
     // Use the adjustable sampling rate passed as prop
-    const recentHistory = history.filter((_, index) => index % samplingRate === 0);
+    const recentHistory = history.filter((p) => (p.timestamp/10) % samplingRate === 0);
     
     if (recentHistory.length < 2) return;
     
-    // For each history item, we'll pick the first value from each channel
-    const timestamps = recentHistory.map(point => (point.timestamp - packetCount) / 1000);
+    // Find the most recent timestamp
+    const latestTime = Math.max(...recentHistory.map(p => p.timestamp));
+    
+    // Convert timestamps to negative seconds relative to the present (0)
+    const timestamps = recentHistory.map(point => (point.timestamp - latestTime) / 1000);
+
+    const average = (arr: Float32Array) => arr.reduce( ( p, c ) => p + c, 0 ) / arr.length;
     
     // Process EMG data - for simplicity, just take the first sample from each channel's array
     const data: uPlot.AlignedData = [
       timestamps,
-      recentHistory.map(p => p.values.chnA ? p.values.chnA[0] : 0),
-      recentHistory.map(p => p.values.chnB ? p.values.chnB[0] : 0),
-      recentHistory.map(p => p.values.chnC ? p.values.chnC[0] : 0),
-      recentHistory.map(p => p.values.chnD ? p.values.chnD[0] : 0),
-      recentHistory.map(p => p.values.chnE ? p.values.chnE[0] : 0),
-      recentHistory.map(p => p.values.chnF ? p.values.chnF[0] : 0),
+      recentHistory.map(p => p.values.chnA ? Math.ceil(average(p.values.chnA)) : 0),
+      recentHistory.map(p => p.values.chnB ? Math.ceil(average(p.values.chnB)) : 0),
+      recentHistory.map(p => p.values.chnC ? Math.ceil(average(p.values.chnC)) : 0),
+      recentHistory.map(p => p.values.chnD ? Math.ceil(average(p.values.chnD)) : 0),
+      recentHistory.map(p => p.values.chnE ? Math.ceil(average(p.values.chnE)) : 0),
+      recentHistory.map(p => p.values.chnF ? Math.ceil(average(p.values.chnF)) : 0),
       recentHistory.map(p => p.rawCounter || 0),
     ];
     
