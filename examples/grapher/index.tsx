@@ -95,13 +95,14 @@ const useEmgStore = create<{
   packetCount: null,
 }));
 
-// Helper to keep only last 10 seconds of data
+// Helper to keep all data for history but filter for display
 const updatePoseHistory = (pose: MyoModHandPose, history: PoseHistory[], packetCount: number | null) => {
   const updatedCount = packetCount === null ? 0 : packetCount + 1;
   const now = updatedCount * 10;
   
+  // Add new data point without filtering
   const newHistory = [
-    ...history.filter(item => now - item.timestamp < 10000),
+    ...history,
     { timestamp: now, values: { ...pose } }
   ];
   return { history: newHistory, packetCount: updatedCount };
@@ -121,8 +122,9 @@ const updateEmgHistory = (emg: MyoModEmgData, rawCounter: number, history: EmgHi
     chnF: new Float32Array(emg.chnF),
   };
   
+  // Add new data point without filtering
   const newHistory = [
-    ...history.filter(item => now - item.timestamp < 10000),
+    ...history,
     { timestamp: now, values: emgDeepCopy, rawCounter }
   ];
   return { history: newHistory, packetCount: updatedCount };
@@ -155,6 +157,69 @@ function App() {
       <StylesInjector />
       <Connected />
     </Suspense>
+  );
+}
+
+// Download button component for EMG data
+function DownloadButton() {
+  const handleDownload = () => {
+    const emgStore = useEmgStore.getState();
+    
+    // Convert Float32Arrays to regular arrays for JSON serialization
+    const exportData = emgStore.history.map(item => ({
+      timestamp: item.timestamp,
+      rawCounter: item.rawCounter,
+      values: {
+        chnA: Array.from(item.values.chnA),
+        chnB: Array.from(item.values.chnB),
+        chnC: Array.from(item.values.chnC),
+        chnD: Array.from(item.values.chnD),
+        chnE: Array.from(item.values.chnE),
+        chnF: Array.from(item.values.chnF),
+      }
+    }));
+    
+    // Create a Blob containing the JSON data
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    
+    // Create a download link
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `emg-data-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+    
+    // Trigger the download
+    document.body.appendChild(link);
+    link.click();
+    
+    // Clean up
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div style={{
+      position: "absolute",
+      top: "10px",
+      right: "10px",
+      zIndex: 10
+    }}>
+      <button 
+        onClick={handleDownload}
+        style={{
+          padding: "8px 16px",
+          backgroundColor: "#4CAF50",
+          color: "white",
+          border: "none",
+          borderRadius: "4px",
+          cursor: "pointer",
+          fontWeight: "bold",
+          boxShadow: "0 2px 4px rgba(0,0,0,0.2)"
+        }}
+      >
+        Download EMG Data
+      </button>
+    </div>
   );
 }
 
@@ -199,6 +264,7 @@ function Connected() {
         emgSamplingRate={emgSamplingRate}
         setEmgSamplingRate={setEmgSamplingRate}
       />
+      <DownloadButton />
     </>
   );
 }
@@ -383,13 +449,15 @@ function Chart({ samplingRate }: { samplingRate: number }) {
   useEffect(() => {
     if (!uPlotRef.current || history.length === 0 || packetCount === null) return;
     
-    // Use the adjustable sampling rate passed as prop
-    const recentHistory = history.filter((_, index) => index % samplingRate === 0);
+    // Find the most recent timestamp
+    const latestTime = history[history.length - 1].timestamp;
+    
+    // Filter to only show the last 10 seconds for display
+    const recentHistory = history
+      .filter(item => latestTime - item.timestamp < 10000)
+      .filter((item) => (item.timestamp/10) % samplingRate === 0);
     
     if (recentHistory.length < 2) return;
-    
-    // Find the most recent timestamp
-    const latestTime = Math.max(...recentHistory.map(p => p.timestamp));
     
     // Convert timestamps to negative seconds relative to the present (0)
     const timestamps = recentHistory.map(point => (point.timestamp - latestTime) / 1000);
@@ -492,20 +560,22 @@ function EmgChart({ samplingRate }: { samplingRate: number }) {
   useEffect(() => {
     if (!uPlotRef.current || history.length === 0 || packetCount === null) return;
     
-    // Use the adjustable sampling rate passed as prop
-    const recentHistory = history.filter((p) => (p.timestamp/10) % samplingRate === 0);
+    // Find the most recent timestamp
+    const latestTime = history[history.length - 1].timestamp;
+    
+    // Filter to only show the last 10 seconds for display
+    const recentHistory = history
+      .filter(item => latestTime - item.timestamp < 10000)
+      .filter((item) => (item.timestamp/10) % samplingRate === 0);
     
     if (recentHistory.length < 2) return;
-    
-    // Find the most recent timestamp
-    const latestTime = Math.max(...recentHistory.map(p => p.timestamp));
     
     // Convert timestamps to negative seconds relative to the present (0)
     const timestamps = recentHistory.map(point => (point.timestamp - latestTime) / 1000);
 
     const average = (arr: Float32Array) => arr.reduce( ( p, c ) => p + c, 0 ) / arr.length;
     
-    // Process EMG data - for simplicity, just take the first sample from each channel's array
+    // Process EMG data - take the average of each channel's array
     const data: uPlot.AlignedData = [
       timestamps,
       recentHistory.map(p => p.values.chnA ? Math.ceil(average(p.values.chnA)) : 0),
@@ -518,7 +588,7 @@ function EmgChart({ samplingRate }: { samplingRate: number }) {
     ];
     
     uPlotRef.current.setData(data);
-  }, [history, packetCount, samplingRate]); // Keep samplingRate in dependencies
+  }, [history, packetCount, samplingRate]);
   
   return (
     <div style={{ marginTop: 10, width: '100%' }}>
