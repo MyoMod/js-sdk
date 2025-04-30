@@ -10,7 +10,15 @@
             "name": "Launch Chrome against localhost",
             "url": "http://localhost:5173",
             "webRoot": "${workspaceFolder}/examples/grapher",
-            "runtimeArgs": ["-flag-switches-begin", "--enable-experimental-web-platform-features", "--flag-switches-end"]
+            "runtimeExecutable": "/snap/bin/chromium",
+            "runtimeArgs": [
+                "-remote-debugging-port=9222",
+                "--user-data-dir=remote-debug-profile",
+                "-flag-switches-begin",
+                "--enable-experimental-web-platform-features",
+                "--flag-switches-end"
+            ]
         }
     ]
 }
+    
