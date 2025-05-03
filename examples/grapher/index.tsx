@@ -10,6 +10,7 @@ import {
   MyoMod,
   MyoModHandPose,
   MyoModEmgData,
+  MyoModFilteredEmgData,
 } from "@myomod/three";
 import { suspend } from "suspend-react";
 import uPlot from "uplot";
@@ -32,6 +33,13 @@ type PoseHistory = {
 type EmgHistory = {
   timestamp: number;
   values: Record<string, Float32Array>;
+  rawCounter: number;
+};
+
+type FilteredEmgHistory = {
+  timestamp: number;
+  values: Float32Array;
+  state: number;
   rawCounter: number;
 };
 
@@ -76,6 +84,22 @@ const useEmgStore = create<{
   packetCount: null,
 }));
 
+const useFilteredEmgStore = create<{
+  filteredEmg: MyoModFilteredEmgData;
+  raw: DataView;
+  history: FilteredEmgHistory[];
+  packetCount: number | null;
+}>(() => ({
+  filteredEmg: {
+    data: new Float32Array(6),
+    state: 0,
+  },
+  raw: new DataView(new Uint8Array(6*4+4+1).buffer),
+  history: [],
+  packetCount: null,
+}));
+
+
 // Helper functions that efficiently update history data
 const updatePoseHistory = (pose: MyoModHandPose, history: PoseHistory[], packetCount: number | null) => {
   const updatedCount = packetCount === null ? 0 : packetCount + 1;
@@ -104,6 +128,16 @@ const updateEmgHistory = (emg: MyoModEmgData, rawCounter: number, history: EmgHi
   
   // Push directly to the existing array
   history.push({ timestamp: now, values: emgDeepCopy, rawCounter });
+  
+  return { history, packetCount: updatedCount };
+};
+
+const updateFilteredEmgHistory = (filteredEmg: MyoModFilteredEmgData, rawCounter: number, history: FilteredEmgHistory[], packetCount: number | null) => {
+  const updatedCount = packetCount === null ? 0 : packetCount + 1;
+  const now = updatedCount * 10;
+  
+  // Push directly to the existing array
+  history.push({ timestamp: now, values: new Float32Array(filteredEmg.data), state: filteredEmg.state, rawCounter });
   
   return { history, packetCount: updatedCount };
 };
@@ -207,6 +241,7 @@ function Connected() {
   // Create sampling rate states at app level to share them
   const [poseSamplingRate, setPoseSamplingRate] = useState(5);
   const [emgSamplingRate, setEmgSamplingRate] = useState(1);
+  const [filteredEmgSamplingRate, setFilteredEmgSamplingRate] = useState(1);
   
   return (
     <>
@@ -231,8 +266,9 @@ function Connected() {
         <OrbitControls enablePan={false} />
       </Canvas>
       <div style={{ position: "absolute", width: "100%", top: "10%", display: "flex", flexDirection: "column", gap: "20px" }}>
-        <Chart samplingRate={poseSamplingRate} />
+        {/* <Chart samplingRate={poseSamplingRate} /> */}
         <EmgChart samplingRate={emgSamplingRate} />
+        <FilteredEmgChart samplingRate={filteredEmgSamplingRate} />
       </div>
       <DataSliders />
       <SamplingControls 
@@ -240,6 +276,8 @@ function Connected() {
         setPoseSamplingRate={setPoseSamplingRate}
         emgSamplingRate={emgSamplingRate}
         setEmgSamplingRate={setEmgSamplingRate}
+        filteredEmgSamplingRate={filteredEmgSamplingRate}
+        setFilteredEmgSamplingRate={setFilteredEmgSamplingRate}
       />
       <DownloadButton />
     </>
@@ -250,12 +288,16 @@ function SamplingControls({
   poseSamplingRate,
   setPoseSamplingRate,
   emgSamplingRate,
-  setEmgSamplingRate
+  setEmgSamplingRate,
+  filteredEmgSamplingRate,
+  setFilteredEmgSamplingRate
 }: {
   poseSamplingRate: number;
   setPoseSamplingRate: (value: number) => void;
   emgSamplingRate: number;
   setEmgSamplingRate: (value: number) => void;
+  filteredEmgSamplingRate: number;
+  setFilteredEmgSamplingRate: (value: number) => void;
 }) {
   return (
     <div style={{
@@ -282,7 +324,7 @@ function SamplingControls({
           style={{ width: "200px" }}
         />
       </div>
-      <div>
+      <div style={{ marginBottom: "10px" }}>
         <div style={{ fontSize: "14px", marginBottom: "5px" }}>
           EMG sampling: every {emgSamplingRate}th point
         </div>
@@ -293,6 +335,20 @@ function SamplingControls({
           step="1"
           value={emgSamplingRate}
           onChange={(e) => setEmgSamplingRate(parseInt(e.target.value))}
+          style={{ width: "200px" }}
+        />
+      </div>
+      <div>
+        <div style={{ fontSize: "14px", marginBottom: "5px" }}>
+          Filtered EMG sampling: every {filteredEmgSamplingRate}th point
+        </div>
+        <input
+          type="range"
+          min="1"
+          max="50"
+          step="1"
+          value={filteredEmgSamplingRate}
+          onChange={(e) => setFilteredEmgSamplingRate(parseInt(e.target.value))}
           style={{ width: "200px" }}
         />
       </div>
@@ -575,6 +631,119 @@ function EmgChart({ samplingRate }: { samplingRate: number }) {
   );
 }
 
+function FilteredEmgChart({ samplingRate }: { samplingRate: number }) {
+  const { history, packetCount } = useFilteredEmgStore();
+  const chartRef = useRef<HTMLDivElement>(null);
+  const uPlotRef = useRef<uPlot | null>(null);
+  
+  useEffect(() => {
+    if (!chartRef.current || uPlotRef.current) return;
+    
+    console.log("Creating uPlot instance for Filtered EMG data");
+    
+    const initialWidth = Math.max(window.innerWidth - 40, 600);
+    const initialHeight = Math.max(Math.min(window.innerHeight * 0.3, 300), 200);
+    
+    const opts: uPlot.Options = {
+      width: initialWidth,
+      height: initialHeight,
+      scales: {
+        x: {
+          time: false,
+          // Set default range to show last 10 seconds of data
+          range: [-10, 0],
+          // Keep 0 (the present) at the right edge
+          auto: false
+        },
+        y: {
+          auto: true,
+        }
+      },
+      legend: {
+        show: true,
+      },
+      series: [
+        { label: "Time (s)", value: (self: any, rawValue: number | null) => rawValue == null ? '0.00' : rawValue.toFixed(2) },
+        { label: "Channel 1", stroke: "red", width: 2 },
+        { label: "Channel 2", stroke: "blue", width: 2 },
+        { label: "Channel 3", stroke: "green", width: 2 },
+        { label: "Channel 4", stroke: "orange", width: 2 },
+        { label: "Channel 5", stroke: "purple", width: 2 },
+        { label: "Channel 6", stroke: "cyan", width: 2 },
+        { label: "State", stroke: "black", width: 2 },
+        { label: "Counter", stroke: "gray", width: 2, show: false },
+      ]
+    };
+    
+    const initialData: uPlot.AlignedData = [
+      [], // timestamps
+      [], [], [], [], [], [], // EMG channels
+      [], // state
+      [], // counter
+    ];
+    
+    uPlotRef.current = new uPlot(opts, initialData, chartRef.current);
+    
+    const handleResize = () => {
+      if (uPlotRef.current && chartRef.current) {
+        const width = Math.max(window.innerWidth - 40, 600);
+        const height = Math.max(Math.min(window.innerHeight * 0.3, 300), 200);
+        uPlotRef.current.setSize({ width, height });
+      }
+    };
+    
+    window.addEventListener('resize', handleResize);
+    handleResize();
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (uPlotRef.current) {
+        uPlotRef.current.destroy();
+        uPlotRef.current = null;
+      }
+    };
+  }, []);
+  
+  useEffect(() => {
+    if (!uPlotRef.current || history.length === 0 || packetCount === null) return;
+    
+    // Find the most recent timestamp
+    const latestTime = history[history.length - 1].timestamp;
+    
+    // Filter to only show the last 10 seconds for display
+    const recentHistory = history
+      .filter(item => latestTime - item.timestamp < 10000)
+      .filter((item) => (item.timestamp/10) % samplingRate === 0);
+    
+    if (recentHistory.length < 2) return;
+    
+    // Convert timestamps to negative seconds relative to the present (0)
+    const timestamps = recentHistory.map(point => (point.timestamp - latestTime) / 1000);
+    
+    // Process filtered EMG data
+    const data: uPlot.AlignedData = [
+      timestamps,
+      recentHistory.map(p => p.values[0] || 0),
+      recentHistory.map(p => p.values[1] || 0),
+      recentHistory.map(p => p.values[2] || 0),
+      recentHistory.map(p => p.values[3] || 0),
+      recentHistory.map(p => p.values[4] || 0),
+      recentHistory.map(p => p.values[5] || 0),
+      recentHistory.map(p => p.state || 0),
+      recentHistory.map(p => p.rawCounter || 0),
+    ];
+    
+    uPlotRef.current.setData(data);
+  }, [history, packetCount, samplingRate]);
+  
+  return (
+    <div style={{ marginTop: 10, width: '100%' }}>
+      <div style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 8 }}>Filtered EMG Data:</div>
+      <div ref={chartRef} style={{ margin: '0 auto' }} />
+    </div>
+  );
+}
+
 function Connecting() {
   return (
     <div
@@ -624,9 +793,24 @@ function Hand({ myoMod }: { myoMod: MyoMod }) {
       }, true);
     });
     
+    const filteredEmgUnsubscribe = myoMod.subscribeFilteredEmgData((filteredEmg, counter, raw) => {
+      useFilteredEmgStore.setState(state => {
+        // Create a shallow copy to trigger state update while reusing the array contents
+        const historyCopy = [...state.history];
+        const { history, packetCount } = updateFilteredEmgHistory(filteredEmg, counter, historyCopy, state.packetCount);
+        return {
+          filteredEmg,
+          raw,
+          history,
+          packetCount
+        }
+      }, true);
+    });
+    
     return () => {
       poseUnsubscribe();
       emgUnsubscribe();
+      filteredEmgUnsubscribe();
     };
   }, [myoMod]);
   
