@@ -122,7 +122,7 @@ export class DPUControlProtocol {
       }, 5000);
     });
 
-    const data = this.encoder.encode(command + '\n');
+    const data = this.encoder.encode(command);
     await this.characteristic.writeValue(data);
 
     const response = await this.responsePromise;
@@ -135,9 +135,18 @@ export class DPUControlProtocol {
     const commandWithoutCrc = `${commandPrefix}${data ? ' ' + data : ''}`;
     const fullCommand = `${commandWithoutCrc}`;
 
+    console.log(
+      `"${fullCommand}"`
+    );
+
     const response = await this.sendCommand(fullCommand);
-    const responseRegex = new RegExp(`^\\${commandPrefix} ([0-9a-f]{2}) ?([^\\s].*?)? \\s*$`);
+
+    console.log(`-> "${response}"`);
+
+    const responseRegex = new RegExp(`^\\${commandPrefix} ([0-9a-f]{2}) ?([^\\s].*?)?$`);
     const match = response.match(responseRegex);
+
+    console.log(match);
 
     if (!match) {
       throw new Error(`Invalid response format: ${response}`);
