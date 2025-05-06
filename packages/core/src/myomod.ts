@@ -65,6 +65,18 @@ function crc32(str: string): string {
   return (crc >>> 0).toString(16).padStart(8, '0');
 }
 
+
+  // Function to decode base64 JSON data
+  const decodeBase64Json = (base64String: string): string | null => {
+    try {
+      // Decode base64 to string
+      return atob(base64String);
+    } catch (err) {
+      console.error("Failed to decode base64 JSON:", err);
+      return null;
+    }
+  };
+
 // DPU Control Protocol response status codes
 export enum DPUControlStatus {
   SUCCESS = 0x00,
@@ -214,9 +226,14 @@ export class DPUControlProtocol {
     }
 
     const parts = data.split(' ');
+    const base64Json = parts[1];
+    const jsonChunkString = decodeBase64Json(base64Json);
+    if (jsonChunkString === null) {
+      throw new Error('Failed to decode base64 JSON data');
+    }
     return {
       chunksCount: parseInt(parts[0]),
-      jsonData: parts[1] || ''
+      jsonData: jsonChunkString || ''
     };
   }
 
@@ -295,10 +312,12 @@ export class DPUControlProtocol {
     }
 
     const parts = data.split(' ');
+    const devicesDescription = decodeBase64Json(parts[2]);
+
     return {
       devicesCount: parseInt(parts[0]),
-      jsonData: parts[1],
-      devicesHash: parts[2]
+      jsonData: devicesDescription || '',
+      devicesHash: parts[1]
     };
   }
 
