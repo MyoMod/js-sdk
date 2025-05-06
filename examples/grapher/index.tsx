@@ -242,6 +242,8 @@ function Connected() {
   const [poseSamplingRate, setPoseSamplingRate] = useState(5);
   const [emgSamplingRate, setEmgSamplingRate] = useState(1);
   const [filteredEmgSamplingRate, setFilteredEmgSamplingRate] = useState(1);
+  // Replace batch size with framerate controls
+  const [updateFramerate, setUpdateFramerate] = useState(30);
   
   return (
     <>
@@ -257,7 +259,10 @@ function Connected() {
           rotation-order="YXZ"
         >
         <Suspense fallback={null}>
-          <Hand myoMod={myoMod} />
+          <Hand 
+            myoMod={myoMod} 
+            updateFramerate={updateFramerate}
+          />
         </Suspense>
           
         </group>
@@ -265,12 +270,12 @@ function Connected() {
         <directionalLight intensity={10} position={[0, 1, 1]} />
         <OrbitControls enablePan={false} />
       </Canvas>
-      <div style={{ position: "absolute", width: "100%", top: "10%", display: "flex", flexDirection: "column", gap: "20px" }}>
+      <div style={{ position: "absolute", width: "100%", top: "00%", display: "flex", flexDirection: "column", gap: "20px" }}>
         {/* <Chart samplingRate={poseSamplingRate} /> */}
         <EmgChart samplingRate={emgSamplingRate} />
         <FilteredEmgChart samplingRate={filteredEmgSamplingRate} />
       </div>
-      <DataSliders />
+      {/* <DataSliders /> */}
       <SamplingControls 
         poseSamplingRate={poseSamplingRate}
         setPoseSamplingRate={setPoseSamplingRate}
@@ -278,6 +283,8 @@ function Connected() {
         setEmgSamplingRate={setEmgSamplingRate}
         filteredEmgSamplingRate={filteredEmgSamplingRate}
         setFilteredEmgSamplingRate={setFilteredEmgSamplingRate}
+        updateFramerate={updateFramerate}
+        setUpdateFramerate={setUpdateFramerate}
       />
       <DownloadButton />
     </>
@@ -290,7 +297,9 @@ function SamplingControls({
   emgSamplingRate,
   setEmgSamplingRate,
   filteredEmgSamplingRate,
-  setFilteredEmgSamplingRate
+  setFilteredEmgSamplingRate,
+  updateFramerate,
+  setUpdateFramerate
 }: {
   poseSamplingRate: number;
   setPoseSamplingRate: (value: number) => void;
@@ -298,6 +307,8 @@ function SamplingControls({
   setEmgSamplingRate: (value: number) => void;
   filteredEmgSamplingRate: number;
   setFilteredEmgSamplingRate: (value: number) => void;
+  updateFramerate: number;
+  setUpdateFramerate: (value: number) => void;
 }) {
   return (
     <div style={{
@@ -338,7 +349,7 @@ function SamplingControls({
           style={{ width: "200px" }}
         />
       </div>
-      <div>
+      <div style={{ marginBottom: "10px" }}>
         <div style={{ fontSize: "14px", marginBottom: "5px" }}>
           Filtered EMG sampling: every {filteredEmgSamplingRate}th point
         </div>
@@ -349,6 +360,20 @@ function SamplingControls({
           step="1"
           value={filteredEmgSamplingRate}
           onChange={(e) => setFilteredEmgSamplingRate(parseInt(e.target.value))}
+          style={{ width: "200px" }}
+        />
+      </div>
+      <div>
+        <div style={{ fontSize: "14px", marginBottom: "5px" }}>
+          Graph update rate: {updateFramerate} FPS
+        </div>
+        <input
+          type="range"
+          min="1"
+          max="60"
+          step="1"
+          value={updateFramerate}
+          onChange={(e) => setUpdateFramerate(parseInt(e.target.value))}
           style={{ width: "200px" }}
         />
       </div>
@@ -611,12 +636,12 @@ function EmgChart({ samplingRate }: { samplingRate: number }) {
     // Process EMG data - take the average of each channel's array
     const data: uPlot.AlignedData = [
       timestamps,
-      recentHistory.map(p => p.values.chnA ? Math.ceil(average(p.values.chnA)) : 0),
-      recentHistory.map(p => p.values.chnB ? Math.ceil(average(p.values.chnB)) : 0),
-      recentHistory.map(p => p.values.chnC ? Math.ceil(average(p.values.chnC)) : 0),
-      recentHistory.map(p => p.values.chnD ? Math.ceil(average(p.values.chnD)) : 0),
-      recentHistory.map(p => p.values.chnE ? Math.ceil(average(p.values.chnE)) : 0),
-      recentHistory.map(p => p.values.chnF ? Math.ceil(average(p.values.chnF)) : 0),
+      recentHistory.map(p => p.values.chnA ? p.values.chnA[0] : 0),
+      recentHistory.map(p => p.values.chnB ? p.values.chnB[0] : 0),
+      recentHistory.map(p => p.values.chnC ? p.values.chnC[0] : 0),
+      recentHistory.map(p => p.values.chnD ? p.values.chnD[0] : 0),
+      recentHistory.map(p => p.values.chnE ? p.values.chnE[0] : 0),
+      recentHistory.map(p => p.values.chnF ? p.values.chnF[0] : 0),
       recentHistory.map(p => p.rawCounter || 0),
     ];
     
@@ -670,7 +695,7 @@ function FilteredEmgChart({ samplingRate }: { samplingRate: number }) {
         { label: "Channel 4", stroke: "orange", width: 2 },
         { label: "Channel 5", stroke: "purple", width: 2 },
         { label: "Channel 6", stroke: "cyan", width: 2 },
-        { label: "State", stroke: "black", width: 2 },
+        { label: "State", stroke: "black", width: 2, show: false },
         { label: "Counter", stroke: "gray", width: 2, show: false },
       ]
     };
@@ -763,50 +788,187 @@ function Connecting() {
   );
 }
 
-function Hand({ myoMod }: { myoMod: MyoMod }) {
+// Modify the Hand component to use requestAnimationFrame
+function Hand({ 
+  myoMod, 
+  updateFramerate 
+}: { 
+  myoMod: MyoMod,
+  updateFramerate: number
+}) {
+  // Create refs to store incoming data
+  const poseDataRef = useRef<{pose: MyoModHandPose, raw: DataView}[]>([]);
+  const emgDataRef = useRef<{emg: MyoModEmgData, counter: number, raw: DataView}[]>([]);
+  const filteredEmgDataRef = useRef<{filteredEmg: MyoModFilteredEmgData, counter: number, raw: DataView}[]>([]);
+  
+  // Animation frame reference
+  const animationFrameRef = useRef<number | null>(null);
+  
+  // Last update timestamp
+  const lastUpdateRef = useRef<number>(0);
+  
+  // Function to process and update all data at a specific framerate
+  const processAllData = (timestamp: number) => {
+    // Calculate time since last update
+    const frameInterval = 1000 / updateFramerate;
+    const elapsed = timestamp - lastUpdateRef.current;
+    
+    // Only update if enough time has passed for the desired framerate
+    if (elapsed >= frameInterval) {
+      // Update pose data if available
+      const poseData = poseDataRef.current;
+      if (poseData.length > 0) {
+        const latest = poseData[poseData.length - 1];
+        
+        usePoseStore.setState(state => {
+          let historyCopy = [...state.history];
+          let updatedPacketCount = state.packetCount;
+          
+          // Process all collected data points
+          poseData.forEach(item => {
+            const result = updatePoseHistory(item.pose, historyCopy, updatedPacketCount);
+            historyCopy = result.history;
+            updatedPacketCount = result.packetCount;
+          });
+          
+          return { 
+            pose: latest.pose, 
+            raw: latest.raw, 
+            history: historyCopy,
+            packetCount: updatedPacketCount
+          };
+        }, true);
+        
+        // Clear processed data
+        poseDataRef.current = [];
+      }
+      
+      // Update EMG data if available
+      const emgData = emgDataRef.current;
+      if (emgData.length > 0) {
+        const latest = emgData[emgData.length - 1];
+        
+        useEmgStore.setState(state => {
+          let historyCopy = [...state.history];
+          let updatedPacketCount = state.packetCount;
+          
+          // Process all collected data points
+          emgData.forEach(item => {
+            const result = updateEmgHistory(item.emg, item.counter, historyCopy, updatedPacketCount);
+            historyCopy = result.history;
+            updatedPacketCount = result.packetCount;
+          });
+          
+          return {
+            emg: latest.emg,
+            raw: latest.raw,
+            history: historyCopy,
+            packetCount: updatedPacketCount
+          };
+        }, true);
+        
+        // Clear processed data
+        emgDataRef.current = [];
+      }
+      
+      // Update Filtered EMG data if available
+      const filteredEmgData = filteredEmgDataRef.current;
+      if (filteredEmgData.length > 0) {
+        const latest = filteredEmgData[filteredEmgData.length - 1];
+        
+        useFilteredEmgStore.setState(state => {
+          let historyCopy = [...state.history];
+          let updatedPacketCount = state.packetCount;
+          
+          // Process all collected data points
+          filteredEmgData.forEach(item => {
+            const result = updateFilteredEmgHistory(item.filteredEmg, item.counter, historyCopy, updatedPacketCount);
+            historyCopy = result.history;
+            updatedPacketCount = result.packetCount;
+          });
+          
+          return {
+            filteredEmg: latest.filteredEmg,
+            raw: latest.raw,
+            history: historyCopy,
+            packetCount: updatedPacketCount
+          };
+        }, true);
+        
+        // Clear processed data
+        filteredEmgDataRef.current = [];
+      }
+      
+      // Update timestamp of last update
+      lastUpdateRef.current = timestamp;
+    }
+    
+    // Continue animation loop
+    animationFrameRef.current = requestAnimationFrame(processAllData);
+  };
+
+  // Setup animation frame loop
+  useEffect(() => {
+    // Start the animation loop
+    animationFrameRef.current = requestAnimationFrame(processAllData);
+    
+    // Cleanup function
+    return () => {
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [updateFramerate]);  // Restart the loop when framerate changes
+
   useEffect(() => {
     const poseUnsubscribe = myoMod.subscribeHandPose((pose, raw) => {
-      usePoseStore.setState(state => {
-        // Create a shallow copy to trigger state update while reusing the array contents
-        const historyCopy = [...state.history];
-        const { history, packetCount } = updatePoseHistory(pose, historyCopy, state.packetCount);
-        return { 
-          pose, 
-          raw, 
-          history,
-          packetCount
-        }
-      }, true);
+      // Just collect the data, processing happens in the animation frame
+      const deepCopyPose = { ...pose };
+      poseDataRef.current.push({ pose: deepCopyPose, raw });
+      
+      // Limit buffer size to prevent memory issues (keep last 1000 samples at most)
+      if (poseDataRef.current.length > 1000) {
+        poseDataRef.current = poseDataRef.current.slice(-1000);
+      }
     });
     
     const emgUnsubscribe = myoMod.subscribeEmgData((emg, counter, raw) => {
-      useEmgStore.setState(state => {
-        // Create a shallow copy to trigger state update while reusing the array contents
-        const historyCopy = [...state.history];
-        const { history, packetCount } = updateEmgHistory(emg, counter, historyCopy, state.packetCount);
-        return {
-          emg,
-          raw,
-          history,
-          packetCount
-        }
-      }, true);
+      // Create deep copies of Float32Arrays for EMG data
+      const emgDeepCopy: MyoModEmgData = {
+        chnA: new Float32Array(emg.chnA),
+        chnB: new Float32Array(emg.chnB),
+        chnC: new Float32Array(emg.chnC),
+        chnD: new Float32Array(emg.chnD),
+        chnE: new Float32Array(emg.chnE),
+        chnF: new Float32Array(emg.chnF),
+      };
+      
+      // Collect data
+      emgDataRef.current.push({ emg: emgDeepCopy, counter, raw });
+      
+      // Limit buffer size
+      if (emgDataRef.current.length > 1000) {
+        emgDataRef.current = emgDataRef.current.slice(-1000);
+      }
     });
     
     const filteredEmgUnsubscribe = myoMod.subscribeFilteredEmgData((filteredEmg, counter, raw) => {
-      useFilteredEmgStore.setState(state => {
-        // Create a shallow copy to trigger state update while reusing the array contents
-        const historyCopy = [...state.history];
-        const { history, packetCount } = updateFilteredEmgHistory(filteredEmg, counter, historyCopy, state.packetCount);
-        return {
-          filteredEmg,
-          raw,
-          history,
-          packetCount
-        }
-      }, true);
+      // Create deep copy for filtered EMG data
+      const filteredEmgDeepCopy: MyoModFilteredEmgData = {
+        data: new Float32Array(filteredEmg.data),
+        state: filteredEmg.state
+      };
+      
+      // Collect data
+      filteredEmgDataRef.current.push({ filteredEmg: filteredEmgDeepCopy, counter, raw });
+      
+      // Limit buffer size
+      if (filteredEmgDataRef.current.length > 1000) {
+        filteredEmgDataRef.current = filteredEmgDataRef.current.slice(-1000);
+      }
     });
     
+    // Cleanup function
     return () => {
       poseUnsubscribe();
       emgUnsubscribe();
