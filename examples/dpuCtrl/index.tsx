@@ -62,6 +62,8 @@ function Connected() {
   const [batteryState, setBatteryState] = useState<{capacity: number, charging: boolean} | null>(null);
   const [devicesList, setDevicesList] = useState<{devicesCount: number, jsonData: string, devicesHash: string} | null>(null);
   const [configChunk, setConfigChunk] = useState<{chunksCount: number, jsonData: string} | null>(null);
+  const [completeConfig, setCompleteConfig] = useState<string | null>(null);
+  const [completeDevices, setCompleteDevices] = useState<string | null>(null);
   
   // Input states for form controls
   const [configIndexInput, setConfigIndexInput] = useState<string>("0");
@@ -221,6 +223,82 @@ function Connected() {
       setIsLoading(false);
     }
   };
+
+  function parseDevice(deviceEntry: string) : { type: string; id: string, displayName: string } | null {
+    let type : string= deviceEntry.substring(1, 11);
+    let id : string= deviceEntry.substring(12, 22);
+
+    let displayName;
+    switch(type.toLowerCase()) {
+      case "embed' emg":
+        displayName = "EMG Sensor";
+        break;
+      case "embed' emg":
+        displayName = "IMU Sensor";
+        break;
+      case "embed' led":
+        displayName = "LED";
+        break;
+      default:
+        displayName = type;
+    }
+    
+    return { type, id, displayName };
+}
+    
+  
+  const handleGetAllDevices = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      setSuccessMessage(null);
+      setCompleteDevices(null);
+      
+      // First get a single chunk to determine the total number of devices
+      const firstChunk = await myoMod.dpuControl.listConnectedDevices(0);
+      const totalDevices = firstChunk.devicesCount;
+      
+      // Initialize an array to hold all device objects
+      const deviceObjects = [];
+      
+      // Process the first device's JSON data
+      try {
+        const deviceEntry = firstChunk.jsonData.trim();
+        const parsedDevice = parseDevice(deviceEntry);
+        if (parsedDevice) {
+          deviceObjects.push(parsedDevice);
+        }
+      } catch (parseErr) {
+        console.error("Error parsing first device:", parseErr);
+      }
+      
+      // If there are multiple devices, get the rest
+      if (totalDevices > 1) {
+        for (let i = 1; i < totalDevices; i++) {
+          try {
+            const deviceChunk = await myoMod.dpuControl.listConnectedDevices(i);
+            const deviceEntry = deviceChunk.jsonData.trim();
+            const parsedDevice = parseDevice(deviceEntry);
+            if (parsedDevice) {
+              deviceObjects.push(parsedDevice);
+            }
+          } catch (chunkErr) {
+            console.error(`Error getting device at index ${i}:`, chunkErr);
+          }
+        }
+      }
+
+      // Create the final JSON string from the processed objects
+      const formattedDevices = JSON.stringify(deviceObjects, null, 2);
+      setCompleteDevices(formattedDevices);
+      setSuccessMessage(`Successfully retrieved and processed all ${totalDevices} devices`);
+      
+    } catch (err) {
+      setError(`Error retrieving all devices: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
   
   // Configuration chunk handlers
   const handleGetConfigurationsChunk = async () => {
@@ -233,6 +311,49 @@ function Connected() {
       setSuccessMessage(`Retrieved configuration chunk ${chunkIndex} of ${chunk.chunksCount}`);
     } catch (err) {
       setError(`Error retrieving configuration chunk: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const handleGetAllConfigurationChunks = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      setSuccessMessage(null);
+      setCompleteConfig(null);
+      
+      // First get a single chunk to determine the total number of chunks
+      const firstChunk = await myoMod.dpuControl.getConfigurationsChunk(0);
+      const totalChunks = firstChunk.chunksCount;
+      
+      // Create an array to store all chunks
+      let allJsonData = firstChunk.jsonData;
+      
+      // Retrieve remaining chunks
+      for (let i = 1; i < totalChunks; i++) {
+        const chunk = await myoMod.dpuControl.getConfigurationsChunk(i);
+        allJsonData += chunk.jsonData;
+      }
+      
+      // Transform hex numbers to regular numbers before parsing
+      const transformedJsonData = allJsonData.replace(/0x[0-9a-fA-F]+/g, (match) => {
+        return parseInt(match, 16).toString();
+      });
+      
+      // Try to parse the combined JSON to make sure it's valid
+      try {
+        const parsedConfig = JSON.parse(transformedJsonData);
+        // Pretty-print the JSON for better readability
+        const formattedConfig = JSON.stringify(parsedConfig, null, 2);
+        setCompleteConfig(formattedConfig);
+        setSuccessMessage(`Successfully retrieved and combined all ${totalChunks} configuration chunks`);
+      } catch (jsonError) {
+        setError(`Retrieved all chunks but failed to parse JSON: ${jsonError instanceof Error ? jsonError.message : String(jsonError)}`);
+        setCompleteConfig(transformedJsonData); // Still set the transformed data
+      }
+    } catch (err) {
+      setError(`Error retrieving all configuration chunks: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setIsLoading(false);
     }
@@ -302,6 +423,15 @@ function Connected() {
     borderRadius: 4,
     fontSize: "14px",
     width: "100px",
+  };
+
+  const getDeviceColor = (deviceType: string) => {
+    const type = deviceType.toLowerCase();
+    if (type.includes("emg")) return "#3388cc";
+    if (type.includes("imu")) return "#33cc33";
+    if (type.includes("fsr")) return "#cc3388";
+    if (type.includes("sensor")) return "#cc6600";
+    return "#888888"; // Default color
   };
 
   return (
@@ -444,6 +574,14 @@ function Connected() {
               >
                 Reload Configurations
               </button>
+              
+              <button 
+                onClick={handleGetAllConfigurationChunks} 
+                disabled={isLoading}
+                style={isLoading ? disabledButtonStyle : {...buttonStyle, background: "#009966"}}
+              >
+                Get Complete Config
+              </button>
             </div>
             
             <h3>Configuration Chunks</h3>
@@ -524,6 +662,26 @@ function Connected() {
                 </div>
               </div>
             )}
+            
+            {completeConfig && (
+              <div style={{ marginTop: 10 }}>
+                <strong>Complete Configuration:</strong> 
+                <div style={{ 
+                  maxHeight: "300px", 
+                  overflow: "auto", 
+                  border: "1px solid #eee", 
+                  padding: "8px",
+                  marginTop: "5px",
+                  backgroundColor: "#f9f9f9",
+                  borderRadius: "4px",
+                  fontFamily: "monospace",
+                  fontSize: "12px",
+                  whiteSpace: "pre-wrap"
+                }}>
+                  {completeConfig}
+                </div>
+              </div>
+            )}
           </div>
         )}
         
@@ -597,28 +755,38 @@ function Connected() {
         {activeTab === "devices" && (
           <div>
             <h3>Connected Devices</h3>
-            <div style={{ display: "flex", gap: 5, alignItems: "center", marginBottom: 20 }}>
-              <label>Device Index:</label>
-              <input 
-                type="number" 
-                value={deviceIndexInput} 
-                onChange={(e) => setDeviceIndexInput(e.target.value)}
-                style={inputStyle}
-                min="0"
-              />
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
+              <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+                <label>Device Index:</label>
+                <input 
+                  type="number" 
+                  value={deviceIndexInput} 
+                  onChange={(e) => setDeviceIndexInput(e.target.value)}
+                  style={inputStyle}
+                  min="0"
+                />
+                <button 
+                  onClick={handleListConnectedDevices} 
+                  disabled={isLoading}
+                  style={isLoading ? disabledButtonStyle : buttonStyle}
+                >
+                  List Single Device
+                </button>
+              </div>
+              
               <button 
-                onClick={handleListConnectedDevices} 
+                onClick={handleGetAllDevices} 
                 disabled={isLoading}
-                style={isLoading ? disabledButtonStyle : buttonStyle}
+                style={isLoading ? disabledButtonStyle : {...buttonStyle, background: "#009966"}}
               >
-                List Devices
+                Get All Devices
               </button>
             </div>
             
             <h3>Results</h3>
             {devicesList && (
               <div style={{ marginTop: 10 }}>
-                <strong>Connected Devices:</strong> {devicesList.devicesCount}
+                <strong>Connected Device:</strong> (Index {deviceIndexInput} of {devicesList.devicesCount})
                 <div>Hash: {devicesList.devicesHash}</div>
                 {devicesList.jsonData && (
                   <div style={{ 
@@ -636,6 +804,133 @@ function Connected() {
                     {devicesList.jsonData}
                   </div>
                 )}
+              </div>
+            )}
+            
+            {completeDevices && (
+              <div style={{ marginTop: 10 }}>
+                <strong>All Connected Devices:</strong> 
+                <div style={{ 
+                  maxHeight: "300px", 
+                  overflow: "auto",
+                  marginTop: "10px",
+                  borderRadius: "4px"
+                }}>
+                  <table style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    fontFamily: "sans-serif",
+                    fontSize: "14px"
+                  }}>
+                    <thead>
+                      <tr style={{
+                        backgroundColor: "#f3f3f3",
+                        borderBottom: "2px solid #ddd"
+                      }}>
+                        <th style={{
+                          padding: "10px",
+                          textAlign: "left",
+                          borderBottom: "1px solid #ddd"
+                        }}>Type</th>
+                        <th style={{
+                          padding: "10px",
+                          textAlign: "left",
+                          borderBottom: "1px solid #ddd"
+                        }}>ID</th>
+                        <th style={{
+                          padding: "10px",
+                          textAlign: "left",
+                          borderBottom: "1px solid #ddd"
+                        }}>Device</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        try {
+                          const devices = JSON.parse(completeDevices);
+                          return devices.map((device: any, index: number) => (
+                            <tr key={index} style={{
+                              backgroundColor: index % 2 === 0 ? "white" : "#f9f9f9",
+                              borderBottom: "1px solid #ddd"
+                            }}>
+                              <td style={{ padding: "8px 10px" }}>{device.type}</td>
+                              <td style={{ padding: "8px 10px", fontFamily: "monospace" }}>{device.id}</td>
+                              <td style={{ padding: "8px 10px" }}>
+                                <div style={{ display: "flex", alignItems: "center" }}>
+                                  {/* Icon based on device type */}
+                                  <div style={{
+                                    width: "24px",
+                                    height: "24px",
+                                    borderRadius: "50%",
+                                    backgroundColor: getDeviceColor(device.type),
+                                    marginRight: "10px",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    color: "white",
+                                    fontWeight: "bold",
+                                    fontSize: "12px"
+                                  }}>
+                                    {device.type.charAt(0).toUpperCase()}
+                                  </div>
+                                  {device.displayName || device.type}
+                                </div>
+                              </td>
+                            </tr>
+                          ));
+                        } catch (e) {
+                          return (
+                            <tr>
+                              <td colSpan={3} style={{ padding: "10px", color: "red" }}>
+                                Error parsing device data
+                              </td>
+                            </tr>
+                          );
+                        }
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{
+                  marginTop: "10px",
+                  fontSize: "12px",
+                  color: "#666",
+                  fontStyle: "italic"
+                }}>
+                  Raw data: 
+                  <button 
+                    onClick={() => {
+                      const el = document.getElementById("rawDeviceData");
+                      if (el) el.style.display = el.style.display === "none" ? "block" : "none";
+                    }}
+                    style={{
+                      marginLeft: "5px",
+                      background: "none",
+                      border: "none",
+                      textDecoration: "underline",
+                      cursor: "pointer",
+                      color: "#0066cc",
+                      fontSize: "12px"
+                    }}
+                  >
+                    Toggle view
+                  </button>
+                  <pre id="rawDeviceData" style={{
+                    display: "none",
+                    maxHeight: "150px",
+                    overflow: "auto",
+                    border: "1px solid #eee",
+                    padding: "8px",
+                    marginTop: "5px",
+                    backgroundColor: "#f9f9f9",
+                    borderRadius: "4px",
+                    fontFamily: "monospace",
+                    fontSize: "12px",
+                    whiteSpace: "pre-wrap"
+                  }}>
+                    {completeDevices}
+                  </pre>
+                </div>
               </div>
             )}
           </div>
