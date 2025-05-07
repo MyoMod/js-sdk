@@ -124,11 +124,6 @@ function Connected() {
         const configChecksumVal = await myoMod.dpuControl.getConfigurationsChecksum();
         setConfigChecksum(configChecksumVal);
         
-        // setInitStep("Firmware Checksum");
-        // setInitProgress(56);
-        // const firmwareChecksumVal = await myoMod.dpuControl.getFirmwareChecksum();
-        // setFirmwareChecksum(firmwareChecksumVal);
-        
         setInitStep("Battery State");
         setInitProgress(84);
         const batteryStateVal = await myoMod.dpuControl.getBatteryState();
@@ -556,6 +551,33 @@ function Connected() {
   };
   
   // Common styles
+  const cardStyle = {
+    background: "white",
+    borderRadius: "8px",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+    padding: "16px",
+    marginBottom: "16px",
+    border: "1px solid #eee",
+    overflow: "hidden",
+  };
+
+  const cardHeaderStyle = {
+    fontWeight: 600,
+    fontSize: "16px",
+    marginBottom: "12px",
+    borderBottom: "1px solid #eee",
+    paddingBottom: "8px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  };
+
+  const cardContentStyle = {
+    display: "flex",
+    flexDirection: "column" as "column",
+    gap: "12px",
+  };
+
   const buttonStyle = {
     padding: "8px 16px",
     background: "#0066cc",
@@ -564,6 +586,24 @@ function Connected() {
     borderRadius: 4,
     cursor: isLoading ? "wait" : "pointer",
     fontSize: "14px",
+    transition: "background 0.2s",
+  };
+  
+  const secondaryButtonStyle = {
+    ...buttonStyle,
+    background: "#f0f0f0",
+    color: "#333",
+    border: "1px solid #ddd",
+  };
+  
+  const successButtonStyle = {
+    ...buttonStyle,
+    background: "#00cc66",
+  };
+  
+  const warningButtonStyle = {
+    ...buttonStyle,
+    background: "#cc6600",
   };
   
   const disabledButtonStyle = {
@@ -574,30 +614,61 @@ function Connected() {
   };
   
   const tabButtonStyle = (tab: string) => ({
-    padding: "8px 16px",
-    background: activeTab === tab ? "#0066cc" : "#e0e0e0",
-    color: activeTab === tab ? "white" : "black",
+    padding: "10px 16px",
+    background: activeTab === tab ? "#fff" : "#f5f5f5",
+    color: activeTab === tab ? "#0066cc" : "#555",
     border: "none",
-    borderRadius: "4px 4px 0 0",
+    borderBottom: activeTab === tab ? "2px solid #0066cc" : "none",
     cursor: "pointer",
     fontSize: "14px",
+    fontWeight: activeTab === tab ? 600 : 400,
+    transition: "all 0.2s",
   });
   
   const inputStyle = {
-    padding: "6px 10px",
-    border: "1px solid #cccccc",
+    padding: "8px 12px",
+    border: "1px solid #ddd",
     borderRadius: 4,
     fontSize: "14px",
     width: "100px",
+  };
+  
+  const infoValueStyle = {
+    padding: "8px 12px",
+    background: "#f7f7f7",
+    borderRadius: "4px",
+    fontFamily: "monospace",
+    fontSize: "14px",
+    color: "#333",
+    wordBreak: "break-all" as "break-all",
   };
 
   const getDeviceColor = (deviceType: string) => {
     const type = deviceType.toLowerCase();
     if (type.includes("emg")) return "#3388cc";
     if (type.includes("imu")) return "#33cc33";
-    if (type.includes("LED")) return "#cc3388";
-    if (type.includes("Bridge")) return "#cc6600";
+    if (type.includes("led")) return "#cc3388";
+    if (type.includes("bridge")) return "#cc6600";
     return "#888888"; // Default color
+  };
+
+  // Card component for grouping related functionality
+  const Card = ({ title, children }: { title: string, children: React.ReactNode }) => (
+    <div style={cardStyle}>
+      <div style={cardHeaderStyle}>{title}</div>
+      <div style={cardContentStyle}>{children}</div>
+    </div>
+  );
+
+  // Info display component
+  const InfoValue = ({ label, value }: { label: string, value: string | number | null | undefined }) => {
+    if (value === null || value === undefined) return null;
+    return (
+      <div>
+        <div style={{ marginBottom: "4px", fontSize: "14px", color: "#555" }}>{label}</div>
+        <div style={infoValueStyle}>{value}</div>
+      </div>
+    );
   };
 
   return (
@@ -606,524 +677,656 @@ function Connected() {
         position: "absolute",
         top: 20,
         left: 20,
-        background: "white",
+        background: "#f8f9fa",
         padding: 20,
         borderRadius: 8,
-        boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
+        boxShadow: "0 2px 10px rgba(0,0,0,0.15)",
         zIndex: 100,
         maxWidth: "800px",
         width: "90%",
-        maxHeight: "80vh",
+        maxHeight: "90vh",
         overflow: "auto"
       }}>
-        <h2>MyoMod DPU Control</h2>
+        <h2 style={{ marginBottom: "20px", color: "#333", borderBottom: "2px solid #0066cc", paddingBottom: "10px" }}>
+          <span style={{ color: "#0066cc" }}>MyoMod</span> DPU Control
+        </h2>
+        
+        {/* Loading state overlay */}
+        {isInitializing && (
+          <div style={{
+            position: "absolute",
+            inset: 0,
+            background: "rgba(255,255,255,0.9)",
+            zIndex: 101,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+          }}>
+            <div style={{ marginBottom: "20px", fontSize: "18px" }}>
+              Initializing MyoMod Connection
+            </div>
+            <div style={{ width: "300px", height: "10px", background: "#eee", borderRadius: "5px", overflow: "hidden" }}>
+              <div 
+                style={{ 
+                  height: "100%", 
+                  background: "#0066cc", 
+                  width: `${initProgress}%`,
+                  transition: "width 0.3s ease-out"
+                }} 
+              />
+            </div>
+            <div style={{ marginTop: "10px", color: "#666" }}>
+              {initStep}... {initProgress}%
+            </div>
+            {error && (
+              <div style={{ 
+                marginTop: "20px",
+                color: "red",
+                padding: "10px",
+                background: "#ffeeee",
+                borderRadius: "4px",
+                maxWidth: "80%"
+              }}>
+                {error}
+              </div>
+            )}
+          </div>
+        )}
         
         {/* Tab Navigation */}
-        <div style={{ display: "flex", marginBottom: "10px", borderBottom: "1px solid #cccccc" }}>
-          <button style={tabButtonStyle("basics")} onClick={() => setActiveTab("basics")}>Basics</button>
+        <div style={{ 
+          display: "flex", 
+          marginBottom: "24px", 
+          borderBottom: "1px solid #ddd",
+          overflow: "auto",
+          whiteSpace: "nowrap" as "nowrap"
+        }}>
+          <button style={tabButtonStyle("basics")} onClick={() => setActiveTab("basics")}>System Overview</button>
           <button style={tabButtonStyle("config")} onClick={() => setActiveTab("config")}>Configuration</button>
-          <button style={tabButtonStyle("system")} onClick={() => setActiveTab("system")}>System</button>
-          <button style={tabButtonStyle("devices")} onClick={() => setActiveTab("devices")}>Devices</button>
+          <button style={tabButtonStyle("system")} onClick={() => setActiveTab("system")}>Firmware & Battery</button>
+          <button style={tabButtonStyle("devices")} onClick={() => setActiveTab("devices")}>Connected Devices</button>
         </div>
         
         {/* Basics Tab */}
         {activeTab === "basics" && (
           <div>
-            <h3>Get Values</h3>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
-              <button 
-                onClick={handleGetVersion} 
-                disabled={isLoading}
-                style={isLoading ? disabledButtonStyle : buttonStyle}
-              >
-                {isLoading ? "Loading..." : "Get Version"}
-              </button>
-
-              <button 
-                onClick={handleGetRealTimeMode} 
-                disabled={isLoading}
-                style={isLoading ? disabledButtonStyle : buttonStyle}
-              >
-                {isLoading ? "Loading..." : "Get Real-Time Mode"}
-              </button>
-            </div>
-            
-            <h3>Set Real-Time Mode</h3>
-            <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
-              <button 
-                onClick={() => handleSetRealTimeMode(0)} 
-                disabled={isLoading || rtMode === 0}
-                style={{
-                  ...buttonStyle,
-                  background: rtMode === 0 ? "#cccccc" : "#cc3300",
-                  cursor: isLoading || rtMode === 0 ? "not-allowed" : "pointer",
-                  opacity: rtMode === 0 ? 0.7 : 1
-                }}
-              >
-                {isLoading ? "Setting..." : "Turn Off (0)"}
-              </button>
-
-              <button 
-                onClick={() => handleSetRealTimeMode(1)} 
-                disabled={isLoading || rtMode === 1}
-                style={{
-                  ...buttonStyle,
-                  background: rtMode === 1 ? "#cccccc" : "#00cc33",
-                  cursor: isLoading || rtMode === 1 ? "not-allowed" : "pointer",
-                  opacity: rtMode === 1 ? 0.7 : 1
-                }}
-              >
-                {isLoading ? "Setting..." : "Turn On (1)"}
-              </button>
-            </div>
-            
-            <h3>Results</h3>
-            {version && (
-              <div style={{ marginTop: 10 }}>
-                <strong>Version:</strong> {version}
+            <Card title="System Version">
+              <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                <button 
+                  onClick={handleGetVersion} 
+                  disabled={isLoading}
+                  style={isLoading ? disabledButtonStyle : buttonStyle}
+                >
+                  {isLoading ? "Loading..." : "Get Version"}
+                </button>
+                {version && <InfoValue label="Version" value={version} />}
               </div>
-            )}
-            
-            {rtMode !== null && (
-              <div style={{ marginTop: 10 }}>
-                <strong>Real-Time Mode:</strong> {rtMode} ({rtMode === 0 ? "Off" : "On"})
+            </Card>
+
+            <Card title="Real-Time Mode">
+              <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                <div>
+                  <div style={{ marginBottom: "8px", fontSize: "14px", color: "#555" }}>Current Mode</div>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button 
+                      onClick={handleGetRealTimeMode} 
+                      disabled={isLoading}
+                      style={isLoading ? disabledButtonStyle : secondaryButtonStyle}
+                    >
+                      Refresh
+                    </button>
+                    {rtMode !== null && (
+                      <div style={infoValueStyle}>{rtMode} ({rtMode === 0 ? "Off" : "On"})</div>
+                    )}
+                  </div>
+                </div>
               </div>
-            )}
+              <div style={{ display: "flex", gap: "16px", marginTop: "8px" }}>
+                <button 
+                  onClick={() => handleSetRealTimeMode(0)} 
+                  disabled={isLoading || rtMode === 0}
+                  style={{
+                    ...buttonStyle,
+                    background: rtMode === 0 ? "#cccccc" : "#cc3300",
+                    cursor: isLoading || rtMode === 0 ? "not-allowed" : "pointer",
+                    opacity: rtMode === 0 ? 0.7 : 1
+                  }}
+                >
+                  Turn Off (0)
+                </button>
+
+                <button 
+                  onClick={() => handleSetRealTimeMode(1)} 
+                  disabled={isLoading || rtMode === 1}
+                  style={{
+                    ...buttonStyle,
+                    background: rtMode === 1 ? "#cccccc" : "#00cc33",
+                    cursor: isLoading || rtMode === 1 ? "not-allowed" : "pointer",
+                    opacity: rtMode === 1 ? 0.7 : 1
+                  }}
+                >
+                  Turn On (1)
+                </button>
+              </div>
+            </Card>
+            
+            <Card title="Battery State">
+              <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                <button 
+                  onClick={handleGetBatteryState} 
+                  disabled={isLoading}
+                  style={isLoading ? disabledButtonStyle : buttonStyle}
+                >
+                  {isLoading ? "Loading..." : "Get Battery State"}
+                </button>
+                
+                {batteryState && (
+                  <div style={{ flex: 1 }}>
+                    <div style={{ 
+                      display: "flex", 
+                      alignItems: "center", 
+                      justifyContent: "space-between",
+                      marginBottom: "4px"
+                    }}>
+                      <span>{batteryState.capacity}%</span>
+                      {batteryState.charging && (
+                        <span style={{ color: "#33cc33", fontSize: "14px" }}>
+                          ⚡ Charging
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ 
+                      width: "100%", 
+                      height: "12px", 
+                      backgroundColor: "#eee", 
+                      borderRadius: "6px",
+                      overflow: "hidden" 
+                    }}>
+                      <div style={{ 
+                        width: `${batteryState.capacity}%`, 
+                        height: "100%", 
+                        backgroundColor: batteryState.charging ? "#33cc33" : "#3388cc",
+                        transition: "width 0.5s ease-out"
+                      }} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card>
+            
+            <Card title="Active Configuration">
+              <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                <div>
+                  <div style={{ marginBottom: "8px", fontSize: "14px", color: "#555" }}>Current Config</div>
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                    <button 
+                      onClick={handleGetActiveConfigIndex} 
+                      disabled={isLoading}
+                      style={isLoading ? disabledButtonStyle : secondaryButtonStyle}
+                    >
+                      Refresh
+                    </button>
+                    {activeConfigIndex !== null && (
+                      <div style={infoValueStyle}>{activeConfigIndex}</div>
+                    )}
+                  </div>
+                </div>
+                
+                <div>
+                  <div style={{ marginBottom: "8px", fontSize: "14px", color: "#555" }}>Set Config</div>
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                    <input 
+                      type="number" 
+                      value={configIndexInput} 
+                      onChange={(e) => setConfigIndexInput(e.target.value)}
+                      style={inputStyle}
+                      min="0"
+                    />
+                    <button 
+                      onClick={handleSetActiveConfigIndex} 
+                      disabled={isLoading}
+                      style={isLoading ? disabledButtonStyle : buttonStyle}
+                    >
+                      Apply
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </Card>
+            
+            <Card title="Configurations Management">
+              <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+                <button 
+                  onClick={handleGetConfigurationsChecksum} 
+                  disabled={isLoading}
+                  style={isLoading ? disabledButtonStyle : secondaryButtonStyle}
+                >
+                  Get Checksum
+                </button>
+                
+                <button 
+                  onClick={handleReloadConfigurations} 
+                  disabled={isLoading}
+                  style={isLoading ? disabledButtonStyle : warningButtonStyle}
+                >
+                  Reload Configurations
+                </button>
+                
+                <button 
+                  onClick={handleGetAllConfigurationChunks} 
+                  disabled={isLoading}
+                  style={isLoading ? disabledButtonStyle : successButtonStyle}
+                >
+                  Get Complete Config
+                </button>
+              </div>
+              
+              {configChecksum && (
+                <InfoValue label="Config Checksum" value={configChecksum} />
+              )}
+            </Card>
           </div>
         )}
         
         {/* Configuration Tab */}
         {activeTab === "config" && (
           <div>
-            <h3>Configuration Index</h3>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 20, alignItems: "center" }}>
-              <button 
-                onClick={handleGetActiveConfigIndex} 
-                disabled={isLoading}
-                style={isLoading ? disabledButtonStyle : buttonStyle}
-              >
-                Get Active Config
-              </button>
-              
-              <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
-                <input 
-                  type="number" 
-                  value={configIndexInput} 
-                  onChange={(e) => setConfigIndexInput(e.target.value)}
-                  style={inputStyle}
-                  min="0"
-                />
-                <button 
-                  onClick={handleSetActiveConfigIndex} 
-                  disabled={isLoading}
-                  style={isLoading ? disabledButtonStyle : buttonStyle}
-                >
-                  Set Config
-                </button>
-              </div>
-            </div>
-            
-            <h3>Configuration Operations</h3>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
-              <button 
-                onClick={handleGetConfigurationsChecksum} 
-                disabled={isLoading}
-                style={isLoading ? disabledButtonStyle : buttonStyle}
-              >
-                Get Config Checksum
-              </button>
-              
-              <button 
-                onClick={handleReloadConfigurations} 
-                disabled={isLoading}
-                style={isLoading ? disabledButtonStyle : {...buttonStyle, background: "#cc6600"}}
-              >
-                Reload Configurations
-              </button>
-              
-              <button 
-                onClick={handleGetAllConfigurationChunks} 
-                disabled={isLoading}
-                style={isLoading ? disabledButtonStyle : {...buttonStyle, background: "#009966"}}
-              >
-                Get Complete Config
-              </button>
-            </div>
-            
-            <h3>Configuration Chunks</h3>
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ display: "flex", gap: 5, alignItems: "center", marginBottom: 10 }}>
-                <label>Chunk Index:</label>
-                <input 
-                  type="number" 
-                  value={chunkIndexInput} 
-                  onChange={(e) => setChunkIndexInput(e.target.value)}
-                  style={inputStyle}
-                  min="0"
-                />
-                <button 
-                  onClick={handleGetConfigurationsChunk} 
-                  disabled={isLoading}
-                  style={isLoading ? disabledButtonStyle : buttonStyle}
-                >
-                  Get Chunk
-                </button>
-              </div>
-              
-              <div style={{ marginBottom: 10 }}>
-                <label>Chunk Data:</label>
-                <textarea 
-                  value={chunkDataInput} 
-                  onChange={(e) => setChunkDataInput(e.target.value)}
-                  style={{ 
-                    width: "100%", 
-                    minHeight: "80px", 
-                    padding: "8px",
-                    marginTop: "5px",
-                    border: "1px solid #cccccc",
-                    borderRadius: "4px"
-                  }}
-                />
-              </div>
-              
-              <button 
-                onClick={handleSetConfigurationsChunk} 
-                disabled={isLoading || !chunkDataInput.trim()}
-                style={isLoading || !chunkDataInput.trim() ? disabledButtonStyle : buttonStyle}
-              >
-                Set Chunk Data
-              </button>
-            </div>
-            
-            <h3>Results</h3>
-            {activeConfigIndex !== null && (
-              <div style={{ marginTop: 10 }}>
-                <strong>Active Config Index:</strong> {activeConfigIndex}
-              </div>
-            )}
-            
-            {configChecksum && (
-              <div style={{ marginTop: 10 }}>
-                <strong>Config Checksum:</strong> {configChecksum}
-              </div>
-            )}
-            
-            {configChunk && (
-              <div style={{ marginTop: 10 }}>
-                <strong>Config Chunk:</strong> 
-                <div>Total Chunks: {configChunk.chunksCount}</div>
-                <div style={{ 
-                  maxHeight: "150px", 
-                  overflow: "auto", 
-                  border: "1px solid #eee", 
-                  padding: "8px",
-                  marginTop: "5px",
-                  backgroundColor: "#f9f9f9",
-                  borderRadius: "4px",
-                  fontFamily: "monospace",
-                  fontSize: "12px",
-                  whiteSpace: "pre-wrap"
-                }}>
-                  {configChunk.jsonData}
+            <Card title="Configuration Chunks">
+              <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", alignItems: "flex-start" }}>
+                <div>
+                  <div style={{ marginBottom: "8px", fontSize: "14px", color: "#555" }}>Get Configuration Chunk</div>
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                    <input 
+                      type="number" 
+                      value={chunkIndexInput} 
+                      onChange={(e) => setChunkIndexInput(e.target.value)}
+                      style={inputStyle}
+                      min="0"
+                      placeholder="Chunk #"
+                    />
+                    <button 
+                      onClick={handleGetConfigurationsChunk} 
+                      disabled={isLoading}
+                      style={isLoading ? disabledButtonStyle : buttonStyle}
+                    >
+                      Get Chunk
+                    </button>
+                  </div>
+                </div>
+                
+                <div style={{ flex: 1 }}>
+                  <div style={{ marginBottom: "8px", fontSize: "14px", color: "#555" }}>Set Configuration Chunk</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    <textarea 
+                      value={chunkDataInput} 
+                      onChange={(e) => setChunkDataInput(e.target.value)}
+                      placeholder="Enter chunk JSON data"
+                      style={{ 
+                        width: "100%", 
+                        minHeight: "80px", 
+                        padding: "8px",
+                        border: "1px solid #ddd",
+                        borderRadius: "4px",
+                        fontFamily: "monospace",
+                        fontSize: "14px"
+                      }}
+                    />
+                    <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                      <button 
+                        onClick={handleSetConfigurationsChunk} 
+                        disabled={isLoading || !chunkDataInput.trim()}
+                        style={isLoading || !chunkDataInput.trim() ? disabledButtonStyle : buttonStyle}
+                      >
+                        Set Chunk Data
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
-            )}
+              
+              {configChunk && (
+                <div style={{ marginTop: "16px" }}>
+                  <div style={{ marginBottom: "8px", fontSize: "14px", color: "#555" }}>Configuration Chunk</div>
+                  <div style={{ marginBottom: "8px", fontSize: "14px" }}>
+                    Total Chunks: <strong>{configChunk.chunksCount}</strong>
+                  </div>
+                  <div style={{ 
+                    maxHeight: "150px", 
+                    overflow: "auto", 
+                    border: "1px solid #eee", 
+                    padding: "12px",
+                    backgroundColor: "#f9f9f9",
+                    borderRadius: "4px",
+                    fontFamily: "monospace",
+                    fontSize: "13px",
+                    whiteSpace: "pre-wrap"
+                  }}>
+                    {configChunk.jsonData}
+                  </div>
+                </div>
+              )}
+            </Card>
             
-            {completeConfig && (
-              <div style={{ marginTop: 10 }}>
-                <strong>Complete Configuration:</strong> 
+            <Card title="Complete Configuration">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                <button 
+                  onClick={handleGetAllConfigurationChunks} 
+                  disabled={isLoading}
+                  style={isLoading ? disabledButtonStyle : buttonStyle}
+                >
+                  {isLoading ? "Loading..." : "Load Complete Configuration"}
+                </button>
+              </div>
+              
+              {completeConfig && (
                 <div style={{ 
-                  maxHeight: "300px", 
+                  maxHeight: "500px", 
                   overflow: "auto", 
                   border: "1px solid #eee", 
-                  padding: "8px",
-                  marginTop: "5px",
+                  padding: "12px",
                   backgroundColor: "#f9f9f9",
                   borderRadius: "4px",
                   fontFamily: "monospace",
-                  fontSize: "12px",
+                  fontSize: "13px",
                   whiteSpace: "pre-wrap"
                 }}>
                   {completeConfig}
                 </div>
-              </div>
-            )}
+              )}
+            </Card>
           </div>
         )}
         
         {/* System Tab */}
         {activeTab === "system" && (
           <div>
-            <h3>System Information</h3>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
-              <button 
-                onClick={handleGetFirmwareVersion} 
-                disabled={isLoading}
-                style={isLoading ? disabledButtonStyle : buttonStyle}
-              >
-                Get Firmware Version
-              </button>
+            <Card title="Firmware Information">
+              <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+                <button 
+                  onClick={handleGetFirmwareVersion} 
+                  disabled={isLoading}
+                  style={isLoading ? disabledButtonStyle : buttonStyle}
+                >
+                  Get Firmware Version
+                </button>
+                
+                <button 
+                  onClick={handleGetFirmwareChecksum} 
+                  disabled={isLoading}
+                  style={isLoading ? disabledButtonStyle : buttonStyle}
+                >
+                  Get Firmware Checksum
+                </button>
+              </div>
               
-              <button 
-                onClick={handleGetFirmwareChecksum} 
-                disabled={isLoading}
-                style={isLoading ? disabledButtonStyle : buttonStyle}
-              >
-                Get Firmware Checksum
-              </button>
+              {firmwareVersion && (
+                <InfoValue label="Firmware Version" value={firmwareVersion} />
+              )}
               
-              <button 
-                onClick={handleGetBatteryState} 
-                disabled={isLoading}
-                style={isLoading ? disabledButtonStyle : buttonStyle}
-              >
-                Get Battery State
-              </button>
-            </div>
+              {firmwareChecksum && (
+                <InfoValue label="Firmware Checksum" value={firmwareChecksum} />
+              )}
+            </Card>
             
-            <h3>Results</h3>
-            {firmwareVersion && (
-              <div style={{ marginTop: 10 }}>
-                <strong>Firmware Version:</strong> {firmwareVersion}
+            <Card title="Battery Status">
+              <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                <button 
+                  onClick={handleGetBatteryState} 
+                  disabled={isLoading}
+                  style={isLoading ? disabledButtonStyle : buttonStyle}
+                >
+                  {isLoading ? "Loading..." : "Refresh Battery Status"}
+                </button>
+                
+                {batteryState && (
+                  <div style={{ flex: 1 }}>
+                    <div style={{ 
+                      display: "flex", 
+                      alignItems: "center", 
+                      justifyContent: "space-between",
+                      marginBottom: "4px"
+                    }}>
+                      <span>{batteryState.capacity}%</span>
+                      {batteryState.charging && (
+                        <span style={{ color: "#33cc33", fontSize: "14px" }}>
+                          ⚡ Charging
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ 
+                      width: "100%", 
+                      height: "12px", 
+                      backgroundColor: "#eee", 
+                      borderRadius: "6px",
+                      overflow: "hidden" 
+                    }}>
+                      <div style={{ 
+                        width: `${batteryState.capacity}%`, 
+                        height: "100%", 
+                        backgroundColor: batteryState.charging ? "#33cc33" : "#3388cc",
+                        transition: "width 0.5s ease-out"
+                      }} />
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-            
-            {firmwareChecksum && (
-              <div style={{ marginTop: 10 }}>
-                <strong>Firmware Checksum:</strong> {firmwareChecksum}
-              </div>
-            )}
-            
-            {batteryState && (
-              <div style={{ marginTop: 10 }}>
-                <strong>Battery:</strong> {batteryState.capacity}% {batteryState.charging ? "(Charging)" : "(Not Charging)"}
-                <div style={{ 
-                  width: "100%", 
-                  height: "20px", 
-                  backgroundColor: "#eee", 
-                  borderRadius: "10px",
-                  marginTop: "5px", 
-                  overflow: "hidden" 
-                }}>
-                  <div style={{ 
-                    width: `${batteryState.capacity}%`, 
-                    height: "100%", 
-                    backgroundColor: batteryState.charging ? "#33cc33" : "#3388cc",
-                    transition: "width 0.5s ease-out"
-                  }} />
-                </div>
-              </div>
-            )}
+            </Card>
           </div>
         )}
         
         {/* Devices Tab */}
         {activeTab === "devices" && (
           <div>
-            <h3>Connected Devices</h3>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
-              <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
-                <label>Device Index:</label>
-                <input 
-                  type="number" 
-                  value={deviceIndexInput} 
-                  onChange={(e) => setDeviceIndexInput(e.target.value)}
-                  style={inputStyle}
-                  min="0"
-                />
+            <Card title="Single Device Information">
+              <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", alignItems: "center" }}>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <label style={{ fontSize: "14px" }}>Device #:</label>
+                  <input 
+                    type="number" 
+                    value={deviceIndexInput} 
+                    onChange={(e) => setDeviceIndexInput(e.target.value)}
+                    style={inputStyle}
+                    min="0"
+                  />
+                </div>
                 <button 
                   onClick={handleListConnectedDevices} 
                   disabled={isLoading}
                   style={isLoading ? disabledButtonStyle : buttonStyle}
                 >
-                  List Single Device
+                  Get Device Info
                 </button>
               </div>
               
-              <button 
-                onClick={handleGetAllDevices} 
-                disabled={isLoading}
-                style={isLoading ? disabledButtonStyle : {...buttonStyle, background: "#009966"}}
-              >
-                Get All Devices
-              </button>
-            </div>
-            
-            <h3>Results</h3>
-            {devicesList && (
-              <div style={{ marginTop: 10 }}>
-                <strong>Connected Device:</strong> (Index {deviceIndexInput} of {devicesList.devicesCount})
-                <div>Hash: {devicesList.devicesHash}</div>
-                {devicesList.jsonData && (
-                  <div style={{ 
-                    maxHeight: "200px", 
-                    overflow: "auto", 
-                    border: "1px solid #eee", 
-                    padding: "8px",
-                    marginTop: "5px",
-                    backgroundColor: "#f9f9f9",
-                    borderRadius: "4px",
-                    fontFamily: "monospace",
-                    fontSize: "12px",
-                    whiteSpace: "pre-wrap"
-                  }}>
-                    {devicesList.jsonData}
+              {devicesList && (
+                <div style={{ marginTop: "12px" }}>
+                  <div style={{ marginBottom: "8px", fontSize: "14px" }}>
+                    Device <strong>{deviceIndexInput}</strong> of <strong>{devicesList.devicesCount}</strong>
                   </div>
-                )}
-              </div>
-            )}
+                  <div style={{ fontSize: "14px", color: "#555", marginBottom: "4px" }}>
+                    Hash: {devicesList.devicesHash}
+                  </div>
+                  {devicesList.jsonData && (
+                    <div style={{ 
+                      overflow: "auto", 
+                      border: "1px solid #eee", 
+                      padding: "12px",
+                      backgroundColor: "#f9f9f9",
+                      borderRadius: "4px",
+                      fontFamily: "monospace",
+                      fontSize: "13px",
+                      whiteSpace: "pre-wrap"
+                    }}>
+                      {devicesList.jsonData}
+                    </div>
+                  )}
+                </div>
+              )}
+            </Card>
             
-            {completeDevices && (
-              <div style={{ marginTop: 10 }}>
-                <strong>All Connected Devices:</strong> 
-                <div style={{ 
-                  maxHeight: "300px", 
-                  overflow: "auto",
-                  marginTop: "10px",
-                  borderRadius: "4px"
-                }}>
-                  <table style={{
-                    width: "100%",
-                    borderCollapse: "collapse",
-                    fontFamily: "sans-serif",
-                    fontSize: "14px"
-                  }}>
-                    <thead>
-                      <tr style={{
-                        backgroundColor: "#f3f3f3",
-                        borderBottom: "2px solid #ddd"
-                      }}>
-                        <th style={{
-                          padding: "10px",
-                          textAlign: "left",
-                          borderBottom: "1px solid #ddd"
-                        }}>Type</th>
-                        <th style={{
-                          padding: "10px",
-                          textAlign: "left",
-                          borderBottom: "1px solid #ddd"
-                        }}>ID</th>
-                        <th style={{
-                          padding: "10px",
-                          textAlign: "left",
-                          borderBottom: "1px solid #ddd"
-                        }}>Device</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(() => {
-                        try {
-                          const devices = JSON.parse(completeDevices);
-                          return devices.map((device: any, index: number) => (
-                            <tr key={index} style={{
-                              backgroundColor: index % 2 === 0 ? "white" : "#f9f9f9",
-                              borderBottom: "1px solid #ddd"
-                            }}>
-                              <td style={{ padding: "8px 10px" }}>{device.type}</td>
-                              <td style={{ padding: "8px 10px", fontFamily: "monospace" }}>{device.id}</td>
-                              <td style={{ padding: "8px 10px" }}>
-                                <div style={{ display: "flex", alignItems: "center" }}>
-                                  {/* Icon based on device type */}
-                                  <div style={{
-                                    width: "24px",
-                                    height: "24px",
-                                    borderRadius: "50%",
-                                    backgroundColor: getDeviceColor(device.type),
-                                    marginRight: "10px",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    color: "white",
-                                    fontWeight: "bold",
-                                    fontSize: "12px"
-                                  }}>
-                                    {device.type.charAt(0).toUpperCase()}
-                                  </div>
-                                  {device.displayName || device.type}
-                                </div>
-                              </td>
-                            </tr>
-                          ));
-                        } catch (e) {
-                          return (
-                            <tr>
-                              <td colSpan={3} style={{ padding: "10px", color: "red" }}>
-                                Error parsing device data
-                              </td>
-                            </tr>
-                          );
-                        }
-                      })()}
-                    </tbody>
-                  </table>
-                </div>
-                <div style={{
-                  marginTop: "10px",
-                  fontSize: "12px",
-                  color: "#666",
-                  fontStyle: "italic"
-                }}>
-                  Raw data: 
-                  <button 
-                    onClick={() => {
-                      const el = document.getElementById("rawDeviceData");
-                      if (el) el.style.display = el.style.display === "none" ? "block" : "none";
-                    }}
-                    style={{
-                      marginLeft: "5px",
-                      background: "none",
-                      border: "none",
-                      textDecoration: "underline",
-                      cursor: "pointer",
-                      color: "#0066cc",
-                      fontSize: "12px"
-                    }}
-                  >
-                    Toggle view
-                  </button>
-                  <pre id="rawDeviceData" style={{
-                    display: "none",
-                    maxHeight: "150px",
-                    overflow: "auto",
-                    border: "1px solid #eee",
-                    padding: "8px",
-                    marginTop: "5px",
-                    backgroundColor: "#f9f9f9",
-                    borderRadius: "4px",
-                    fontFamily: "monospace",
-                    fontSize: "12px",
-                    whiteSpace: "pre-wrap"
-                  }}>
-                    {completeDevices}
-                  </pre>
-                </div>
+            <Card title="All Connected Devices">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                <button 
+                  onClick={handleGetAllDevices} 
+                  disabled={isLoading}
+                  style={isLoading ? disabledButtonStyle : successButtonStyle}
+                >
+                  {isLoading ? "Loading..." : "Get All Connected Devices"}
+                </button>
               </div>
-            )}
+              
+              {completeDevices && (
+                <div>
+                  <div style={{ 
+                    borderRadius: "4px",
+                    border: "1px solid #eee",
+                    overflow: "hidden",
+                  }}>
+                    <table style={{
+                      width: "100%",
+                      borderCollapse: "collapse",
+                      fontFamily: "sans-serif",
+                      fontSize: "14px"
+                    }}>
+                      <thead>
+                        <tr style={{
+                          backgroundColor: "#f3f3f3",
+                        }}>
+                          <th style={{
+                            padding: "12px",
+                            textAlign: "left",
+                          }}>Type</th>
+                          <th style={{
+                            padding: "12px",
+                            textAlign: "left",
+                          }}>ID</th>
+                          <th style={{
+                            padding: "12px",
+                            textAlign: "left",
+                          }}>Device</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          try {
+                            const devices = JSON.parse(completeDevices);
+                            return devices.map((device: any, index: number) => (
+                              <tr key={index} style={{
+                                backgroundColor: index % 2 === 0 ? "white" : "#f9f9f9",
+                                borderTop: "1px solid #eee"
+                              }}>
+                                <td style={{ padding: "10px 12px" }}>{device.type}</td>
+                                <td style={{ padding: "10px 12px", fontFamily: "monospace" }}>{device.id}</td>
+                                <td style={{ padding: "10px 12px" }}>
+                                  <div style={{ display: "flex", alignItems: "center" }}>
+                                    {/* Icon based on device type */}
+                                    <div style={{
+                                      width: "28px",
+                                      height: "28px",
+                                      borderRadius: "50%",
+                                      backgroundColor: getDeviceColor(device.type),
+                                      marginRight: "12px",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      color: "white",
+                                      fontWeight: "bold",
+                                      fontSize: "13px"
+                                    }}>
+                                      {device.type.charAt(0).toUpperCase()}
+                                    </div>
+                                    {device.displayName || device.type}
+                                  </div>
+                                </td>
+                              </tr>
+                            ));
+                          } catch (e) {
+                            return (
+                              <tr>
+                                <td colSpan={3} style={{ padding: "12px", color: "red" }}>
+                                  Error parsing device data
+                                </td>
+                              </tr>
+                            );
+                          }
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+                  
+                  <div style={{
+                    marginTop: "12px",
+                    fontSize: "13px",
+                    color: "#666",
+                  }}>
+                    <button 
+                      onClick={() => {
+                        const el = document.getElementById("rawDeviceData");
+                        if (el) el.style.display = el.style.display === "none" ? "block" : "none";
+                      }}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        textDecoration: "underline",
+                        cursor: "pointer",
+                        color: "#0066cc",
+                        fontSize: "13px",
+                        padding: 0,
+                      }}
+                    >
+                      Toggle raw JSON view
+                    </button>
+                    <pre id="rawDeviceData" style={{
+                      display: "none",
+                      maxHeight: "150px",
+                      overflow: "auto",
+                      border: "1px solid #eee",
+                      padding: "12px",
+                      marginTop: "8px",
+                      backgroundColor: "#f9f9f9",
+                      borderRadius: "4px",
+                      fontFamily: "monospace",
+                      fontSize: "13px",
+                      whiteSpace: "pre-wrap"
+                    }}>
+                      {completeDevices}
+                    </pre>
+                  </div>
+                </div>
+              )}
+            </Card>
           </div>
         )}
         
         {/* Messages - shown on all tabs */}
-        {successMessage && (
+        {!isInitializing && successMessage && (
           <div style={{ 
             marginTop: 20, 
-            color: "green",
-            padding: 8,
-            background: "#eeffee",
-            borderRadius: 4
+            color: "#1a8754",
+            padding: "10px 16px",
+            background: "#d1e7dd",
+            borderRadius: 4,
+            display: "flex",
+            alignItems: "center",
+            gap: "8px"
           }}>
-            {successMessage}
+            <span style={{ fontWeight: "bold" }}>✓</span> {successMessage}
           </div>
         )}
         
-        {error && (
+        {!isInitializing && error && (
           <div style={{ 
             marginTop: 20, 
-            color: "red",
-            padding: 8,
-            background: "#ffeeee",
-            borderRadius: 4
+            color: "#842029",
+            padding: "10px 16px",
+            background: "#f8d7da",
+            borderRadius: 4,
+            display: "flex",
+            alignItems: "center",
+            gap: "8px"
           }}>
-            {error}
+            <span style={{ fontWeight: "bold" }}>⚠</span> {error}
           </div>
         )}
       </div>
