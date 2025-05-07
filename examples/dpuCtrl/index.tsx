@@ -52,6 +52,10 @@ const loadMyoModSymbol = Symbol("loadMyoMod");
 
 function Connected() {
   const myoMod = suspend(() => loadMyoMod(), [loadMyoModSymbol]);
+
+  // Track mounting with useRef to prevent double initialization
+  const mountedRef = useRef(false);
+
   // State for various data types
   const [version, setVersion] = useState<string | null>(null);
   const [rtMode, setRtMode] = useState<number | null>(null);
@@ -76,6 +80,168 @@ function Connected() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>("basics");
+  
+  // Initial loading state
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [initProgress, setInitProgress] = useState(0);
+  const [initStep, setInitStep] = useState("");
+
+  // Initialization effect - runs once when component mounts
+  useEffect(() => {
+    // Skip initialization if this is a duplicate mount
+    if (mountedRef.current) {
+      console.log("Skipping initialization - component already mounted");
+      return;
+    }
+
+    // Mark as mounted
+    mountedRef.current = true;
+
+    const fetchInitialData = async () => {
+      console.log("Initializing MyoMod DPU Control...");
+      try {
+        setIsInitializing(true);
+        setError(null);
+        
+        // Sequential data fetching - one command at a time
+        setInitStep("Version");
+        setInitProgress(0);
+        const versionInfo = await myoMod.dpuControl.getVersion();
+        setVersion(versionInfo);
+        
+        setInitStep("Real-Time Mode");
+        setInitProgress(14);
+        const rtModeVal = await myoMod.dpuControl.getRealTimeMode();
+        setRtMode(rtModeVal);
+        
+        setInitStep("Active Config");
+        setInitProgress(28);
+        const activeConfigIndexVal = await myoMod.dpuControl.getActiveConfigIndex();
+        setActiveConfigIndex(activeConfigIndexVal);
+        
+        setInitStep("Config Checksum");
+        setInitProgress(42);
+        const configChecksumVal = await myoMod.dpuControl.getConfigurationsChecksum();
+        setConfigChecksum(configChecksumVal);
+        
+        // setInitStep("Firmware Checksum");
+        // setInitProgress(56);
+        // const firmwareChecksumVal = await myoMod.dpuControl.getFirmwareChecksum();
+        // setFirmwareChecksum(firmwareChecksumVal);
+        
+        setInitStep("Battery State");
+        setInitProgress(84);
+        const batteryStateVal = await myoMod.dpuControl.getBatteryState();
+        setBatteryState(batteryStateVal);
+        
+        setInitStep("Devices and Config");
+        setInitProgress(92);
+        
+        // Get devices
+        await handleGetAllDevicesInternal();
+        
+        // Get configurations
+        await handleGetAllConfigurationChunksInternal();
+        
+        setInitProgress(100);
+        setSuccessMessage("All data loaded successfully");
+      } catch (err) {
+        console.error("Error during initialization:", err);
+        setError(`Error during initialization (${initStep}): ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        setIsInitializing(false);
+      }
+    };
+    
+    fetchInitialData();
+    
+    // Cleanup function
+    return () => {
+      console.log("Connected component unmounting");
+    };
+  }, [myoMod]);
+
+  // Internal version of handleGetAllDevices that doesn't update UI loading state
+  const handleGetAllDevicesInternal = async () => {
+    try {
+      // First get a single chunk to determine the total number of devices
+      const firstChunk = await myoMod.dpuControl.listConnectedDevices(0);
+      const totalDevices = firstChunk.devicesCount;
+      
+      // Initialize an array to hold all device objects
+      const deviceObjects = [];
+      
+      // Process the first device's JSON data
+      try {
+        const deviceEntry = firstChunk.jsonData.trim();
+        const parsedDevice = parseDevice(deviceEntry);
+        if (parsedDevice) {
+          deviceObjects.push(parsedDevice);
+        }
+      } catch (parseErr) {
+        console.error("Error parsing first device:", parseErr);
+      }
+      
+      // If there are multiple devices, get the rest
+      if (totalDevices > 1) {
+        for (let i = 1; i < totalDevices; i++) {
+          try {
+            const deviceChunk = await myoMod.dpuControl.listConnectedDevices(i);
+            const deviceEntry = deviceChunk.jsonData.trim();
+            const parsedDevice = parseDevice(deviceEntry);
+            if (parsedDevice) {
+              deviceObjects.push(parsedDevice);
+            }
+          } catch (chunkErr) {
+            console.error(`Error getting device at index ${i}:`, chunkErr);
+          }
+        }
+      }
+
+      // Create the final JSON string from the processed objects
+      const formattedDevices = JSON.stringify(deviceObjects, null, 2);
+      setCompleteDevices(formattedDevices);
+      
+    } catch (err) {
+      console.error("Error retrieving all devices:", err);
+    }
+  };
+  
+  // Internal version of handleGetAllConfigurationChunks that doesn't update UI loading state
+  const handleGetAllConfigurationChunksInternal = async () => {
+    try {
+      // First get a single chunk to determine the total number of chunks
+      const firstChunk = await myoMod.dpuControl.getConfigurationsChunk(0);
+      const totalChunks = firstChunk.chunksCount;
+      
+      // Create an array to store all chunks
+      let allJsonData = firstChunk.jsonData;
+      
+      // Retrieve remaining chunks
+      for (let i = 1; i < totalChunks; i++) {
+        const chunk = await myoMod.dpuControl.getConfigurationsChunk(i);
+        allJsonData += chunk.jsonData;
+      }
+      
+      // Transform hex numbers to regular numbers before parsing
+      const transformedJsonData = allJsonData.replace(/0x[0-9a-fA-F]+/g, (match) => {
+        return parseInt(match, 16).toString();
+      });
+      
+      // Try to parse the combined JSON to make sure it's valid
+      try {
+        const parsedConfig = JSON.parse(transformedJsonData);
+        // Pretty-print the JSON for better readability
+        const formattedConfig = JSON.stringify(parsedConfig, null, 2);
+        setCompleteConfig(formattedConfig);
+      } catch (jsonError) {
+        console.error("Error parsing config JSON:", jsonError);
+        setCompleteConfig(transformedJsonData); // Still set the transformed data
+      }
+    } catch (err) {
+      console.error("Error retrieving all configuration chunks:", err);
+    }
+  };
 
   // Basic GET handlers
   const handleGetVersion = async () => {
@@ -429,8 +595,8 @@ function Connected() {
     const type = deviceType.toLowerCase();
     if (type.includes("emg")) return "#3388cc";
     if (type.includes("imu")) return "#33cc33";
-    if (type.includes("fsr")) return "#cc3388";
-    if (type.includes("sensor")) return "#cc6600";
+    if (type.includes("LED")) return "#cc3388";
+    if (type.includes("Bridge")) return "#cc6600";
     return "#888888"; // Default color
   };
 
