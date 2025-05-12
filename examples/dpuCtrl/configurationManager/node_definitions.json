@@ -1,0 +1,214 @@
+{
+  "deviceNodes": [
+    {
+      "name": "BLE Bridge",
+      "type": "BLE Bridge",
+      "example_id": "Bridge 001",
+      "description": "The BLE-Bridge is a MyoMod device on the MyoMod bracelet that transfers real-time data between the host and the DPU.",
+      "inputs": [
+        {
+          "index": "0-7",
+          "type": "uint8",
+          "name": "Pose Data",
+          "description": "Transmits pose classification data to the host"
+        },
+        {
+          "index": "8-13",
+          "type": "float32[15]",
+          "name": "Raw EMG Data",
+          "description": "Transmits raw EMG channel data to the host"
+        },
+        {
+          "index": "14-19",
+          "type": "float32",
+          "name": "Filtered EMG Data",
+          "description": "Transmits filtered EMG data to the host"
+        }
+      ],
+      "outputs": [],
+      "options": {},
+      "example": {
+        "type": "BLE Bridge",
+        "ID": "Bridge 001"
+      }
+    }
+  ],
+
+  "embeddedDeviceNodes": [
+    {
+      "name": "IMU",
+      "type": "Embed' IMU",
+      "example_id": "OnboardIMU",
+      "description": "Inertial Measurement Unit providing motion tracking capabilities",
+      "inputs": [],
+      "outputs": [
+        {
+          "index": "0-2",
+          "type": "float32",
+          "name": "Accelerometer",
+          "description": "Acceleration data in m/s² for X, Y, and Z axes",
+          "range": "-16 to 16"
+        },
+        {
+          "index": "3-5",
+          "type": "float32",
+          "name": "Gyroscope",
+          "description": "Rotational velocity in degrees/s for X, Y, and Z axes",
+          "range": "-2000 to 2000"
+        }
+      ],
+      "options": {},
+      "example": {
+        "type": "Embed' IMU",
+        "ID": "OnboardIMU"
+      }
+    },
+    {
+      "name": "LED",
+      "type": "Embed' LED",
+      "example_id": "OnboardLED",
+      "description": "Onboard RGB LED component for visual feedback",
+      "inputs": [
+        {
+          "index": "0",
+          "type": "float32",
+          "name": "Red",
+          "description": "Red channel intensity",
+          "range": "0.0 to 1.0"
+        },
+        {
+          "index": "1",
+          "type": "float32",
+          "name": "Green",
+          "description": "Green channel intensity",
+          "range": "0.0 to 1.0"
+        },
+        {
+          "index": "2",
+          "type": "float32",
+          "name": "Blue",
+          "description": "Blue channel intensity",
+          "range": "0.0 to 1.0"
+        }
+      ],
+      "outputs": [],
+      "options": {
+        "brightness": {
+          "type": "float32",
+          "description": "Global brightness multiplier for all channels",
+          "range": "0.0 to 1.0",
+          "default": 0.1
+        }
+      },
+      "example": {
+        "type": "Embed' LED",
+        "ID": "OnboardLED",
+        "brightness": 0.1
+      }
+    },
+    {
+      "name": "EMG",
+      "type": "Embed' EMG",
+      "example_id": "OnboardEMG",
+      "description": "Embedded EMG sensor for capturing muscle electrical activity",
+      "inputs": [],
+      "outputs": [
+        {
+          "index": "0-5",
+          "type": "float32[15]",
+          "name": "EMG Channels",
+          "description": "EMG data from electrode channels with sequential time samples",
+          "range": "-5.0 to 5.0"
+        }
+      ],
+      "options": {
+        "amplification": {
+          "type": "float32",
+          "description": "Signal strength multiplier applied to all channels",
+          "range": "0.1 to 10.0",
+          "default": 1.0
+        }
+      },
+      "example": {
+        "type": "Embed' EMG",
+        "ID": "OnboardEMG",
+        "amplification": 1
+      }
+    }
+  ],
+
+  "algorithmicNodes": [
+    {
+      "name": "LinearFuncNode",
+      "type": "LinearFuncNode",
+      "example_id": "",
+      "description": "Applies a linear transformation (y = ax + b) to input data",
+      "inputs": [
+        {
+          "index": "0",
+          "type": "dynamic",
+          "name": "Input",
+          "description": "Input value to be transformed"
+        }
+      ],
+      "outputs": [
+        {
+          "index": "0",
+          "type": "dynamic",
+          "name": "Output",
+          "description": "Transformed output value"
+        }
+      ],
+      "options": {
+        "dataType": {
+          "type": "enum",
+          "description": "Data type for input and output ports",
+          "values": ["float", "int32", "uint32", "int8", "uint8"],
+          "default": "float"
+        },
+        "a": {
+          "type": "float32",
+          "description": "Multiplier coefficient",
+          "default": 0.1
+        },
+        "b": {
+          "type": "float32",
+          "description": "Offset value",
+          "default": 0
+        }
+      },
+      "example": {
+        "type": "LinearFuncNode",
+        "dataType": "float",
+        "a": 0.1,
+        "b": 0
+      }
+    },
+    {
+      "name": "AdaptiveEMGFiltNode",
+      "type": "AdaptiveEMGFiltNode",
+      "example_id": "",
+      "description": "Specialized filtering for EMG signals with adaptive parameters",
+      "inputs": [
+        {
+          "index": "0-5",
+          "type": "float32[15]",
+          "name": "Raw EMG",
+          "description": "Raw EMG data channels for filtering"
+        }
+      ],
+      "outputs": [
+        {
+          "index": "0-5",
+          "type": "float32",
+          "name": "Filtered EMG",
+          "description": "Processed and filtered EMG signal"
+        }
+      ],
+      "options": {},
+      "example": {
+        "type": "AdaptiveEMGFiltNode"
+      }
+    }
+  ]
+}
