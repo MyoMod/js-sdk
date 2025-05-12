@@ -431,7 +431,9 @@ export function useMyoModData(myoMod: MyoMod) {
       setError(null);
       setSuccessMessage(null);
       const chunkIndex = parseInt(chunkIndexInput);
-      await myoMod.dpuControl.setConfigurationsChunk(chunkIndex, chunkDataInput);
+
+      const base64ChunkData = btoa(chunkDataInput);
+      await myoMod.dpuControl.setConfigurationsChunk(chunkIndex, base64ChunkData);
       setSuccessMessage(`Configuration chunk ${chunkIndex} set successfully`);
     } catch (err) {
       setError(`Error setting configuration chunk: ${err instanceof Error ? err.message : String(err)}`);
