@@ -224,3 +224,11 @@
   font-size: 10px;
   cursor: pointer;
 }
+
+.react-flow__handle.connectingto {
+  background: #ff6060 !important;
+}
+ 
+.react-flow__handle.valid {
+  background: #55dd99 !important;
+}
