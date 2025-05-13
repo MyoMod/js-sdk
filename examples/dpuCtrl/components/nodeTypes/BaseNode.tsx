@@ -213,12 +213,38 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
       onChange(optionKey, newValue);
     };
 
+    // Prevent wheel events from changing the value and losing focus
+    const handleWheel = (e: React.WheelEvent<HTMLInputElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Manually handle the wheel event to change the value
+      const delta = e.deltaY < 0 ? 1 : -1;
+      let step = valueInfo.isInterger ? 1 : 0.01;
+
+      let newValue = currentValue + delta * step;
+
+      // Apply constraints
+      if (valueInfo.min !== undefined && newValue < valueInfo.min)
+        newValue = valueInfo.min;
+      if (valueInfo.max !== undefined && newValue > valueInfo.max)
+        newValue = valueInfo.max;
+
+      // For integers, ensure the value is an integer
+      if (valueInfo.isInterger) {
+        newValue = Math.round(newValue);
+      }
+
+      onChange(optionKey, newValue);
+    };
+
     return (
       <input
         type="number"
-        value={currentValue}
+        value={currentValue.toFixed(2)}
         onChange={handleChange}
-        className="option-input"
+        onWheel={handleWheel}
+        className="option-input nowheel nodrag"
         style={{ border: `1px solid ${borderColor}` }}
         min={valueInfo.min}
         max={valueInfo.max}
