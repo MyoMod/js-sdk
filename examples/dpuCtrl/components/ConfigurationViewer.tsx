@@ -10,6 +10,10 @@ import {
   useEdgesState,
   Node,
   Edge,
+  Connection,
+  addEdge,
+  OnConnect,
+  OnEdgesDelete,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { BaseNode, NodePort } from "./nodeTypes/BaseNode";
@@ -35,6 +39,7 @@ interface ConfigurationData {
 
 interface ConfigurationViewerProps {
   configData: ConfigurationData | null;
+  onConfigChange?: (config: Partial<ConfigurationData>) => void; // New callback for config changes
 }
 
 // Define base node types
@@ -49,6 +54,7 @@ const elk = new ELK();
 
 export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
   configData,
+  onConfigChange,
 }) => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -248,6 +254,80 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
     return newEdges;
   }, []);
 
+  // Function to update the configuration when edges change
+  const updateConfigFromEdges = useCallback(
+    (newEdges: Edge[]) => {
+      if (!configData || !onConfigChange) return;
+
+      // Create a new links object from the edges
+      const newLinks: { [key: string]: string } = {};
+
+      newEdges.forEach((edge) => {
+        if (edge.sourceHandle && edge.targetHandle) {
+          // Extract port indices from handles
+          const sourceNodeId = edge.source;
+          const targetNodeId = edge.target;
+          const sourcePort = edge.sourceHandle.split("-").pop();
+          const targetPort = edge.targetHandle.split("-").pop();
+
+          if (sourcePort && targetPort) {
+            // Format: "nodeType+index:port"
+            const targetKey = `${targetNodeId}:${targetPort}`;
+            const sourceValue = `${sourceNodeId}:${sourcePort}`;
+            newLinks[targetKey] = sourceValue;
+          }
+        }
+      });
+
+      // Send updated links to parent component
+      onConfigChange({
+        ...configData,
+        links: newLinks,
+      });
+    },
+    [configData, onConfigChange]
+  );
+
+  // Handle new connections
+  const onConnect = useCallback(
+    (params: Connection) => {
+      // Create a new edge with the connection params
+      const newEdges = addEdge(
+        {
+          ...params,
+          type: "default",
+          animated: false,
+          id: `${params.source}-${params.sourceHandle}-${params.target}-${params.targetHandle}`,
+        },
+        edges
+      );
+
+      setEdges(newEdges);
+      updateConfigFromEdges(newEdges);
+    },
+    [edges, setEdges, updateConfigFromEdges]
+  );
+
+  // Handle edge deletions
+  const onEdgesDelete = useCallback(
+    (edgesToDelete: Edge[]) => {
+      // The edges have already been deleted from the state at this point
+      // Just need to update the configuration
+      updateConfigFromEdges(
+        edges.filter((edge) => !edgesToDelete.some((e) => e.id === edge.id))
+      );
+    },
+    [edges, updateConfigFromEdges]
+  );
+
+  // Handle edge updates
+  useEffect(() => {
+    // We don't want to update config during initial loading
+    if (!isLoading && edges.length > 0) {
+      updateConfigFromEdges(edges);
+    }
+  }, [edges, isLoading, updateConfigFromEdges]);
+
   // Function to apply automatic layout using ELK
   const applyLayout = useCallback(async () => {
     if (nodes.length === 0) return;
@@ -260,29 +340,10 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
     // TODO: Properly add handles to elk nodes to improve auto-layout
     // Convert nodes and edges to ELK format
     const elkNodes = nodes.map((node) => {
-      // const outputPorts = nodeTypes[node.type].data.outputs;
-      // const targetPorts = node.data.targetHandles.map((t) => ({
-      //   id: t.id,
-
-      //   // ⚠️ it's important to let elk know on which side the port is
-      //   // in this example targets are on the left (WEST) and sources on the right (EAST)
-      //   properties: {
-      //     side: "WEST",
-      //   },
-      // }));
-
-      // const sourcePorts = node.data.sourceHandles.map((s) => ({
-      //   id: s.id,
-      //   properties: {
-      //     side: "EAST",
-      //   },
-      // }));
-
       return {
         id: node.id,
         width: node.measured.width,
         height: node.measured.height,
-        // ports: [...targetPorts, ...sourcePorts],
         properties: {
           "org.eclipse.elk.portConstraints": "FIXED_ORDER",
         },
@@ -466,10 +527,16 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
           edges={edges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          onReconnect={onConnect}
+          onEdgesDelete={onEdgesDelete}
           nodeTypes={nodeTypes}
           fitView
           attributionPosition="bottom-left"
-          connectionLineType={ConnectionLineType.SmoothStep}
+          deleteKeyCode={["Backspace", "Delete"]}
+          edgesFocusable={true}
+          edgesReconnectable={true}
+          connectOnClick={true}
         >
           <Controls />
           <MiniMap />
@@ -576,6 +643,12 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
                   ></div>
                   <span>Algorithm</span>
                 </div>
+              </div>
+              <div
+                style={{ marginTop: "8px", fontSize: "12px", color: "#666" }}
+              >
+                Tip: Connect nodes by dragging between ports. Delete connections
+                with Delete key.
               </div>
             </div>
           </Panel>
