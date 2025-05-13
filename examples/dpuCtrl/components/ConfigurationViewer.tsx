@@ -536,6 +536,23 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
       }
     : { width: "100%", height: "500px" };
 
+  // Minimap colorization
+  function nodeColor(node: any) {
+  switch (node.data?.id?.[0]) {
+    case 'e':
+      // Embedded Device Node
+      return '#e8f5e9';
+    case 'a':
+      // Algorithmic Node
+      return '#fff8e1';
+    case 'd':
+      // Device Node
+      return '#e3f2fd';
+    default:
+      return '#000000';
+  }
+}
+
   return (
     <div style={containerStyles}>
       {isLoading ? (
@@ -587,7 +604,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
           isValidConnection={isValidConnection}
         >
           <Controls />
-          <MiniMap />
+          <MiniMap pannable draggable nodeColor={nodeColor}/>
           <Background color="#aaa" gap={16} />
           <Panel position="top-left">
             <div style={{ display: "flex", gap: "8px" }}>
