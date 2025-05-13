@@ -394,6 +394,23 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
     // TODO: Properly add handles to elk nodes to improve auto-layout
     // Convert nodes and edges to ELK format
     const elkNodes = nodes.map((node) => {
+      const nInputPorts = nodePortTypes[node.type]?.inputs.length || 0;
+      const nOutputPorts = nodePortTypes[node.type]?.outputs.length || 0;
+
+      const inputPorts = Array.from({ length: nInputPorts }, (_, i) => ({
+        id: `${node.id}-input-${i}`,
+        properties: {
+          side: "WEST",
+        },
+      }));
+      const outputPorts = Array.from({ length: nOutputPorts }, (_, i) => ({
+        id: `${node.id}-output-${i}`,
+        properties: {
+          side: "EAST",
+        },
+      }));
+      outputPorts.reverse();
+      inputPorts.reverse();
       return {
         id: node.id,
         width: node.measured.width,
@@ -401,13 +418,18 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
         properties: {
           "org.eclipse.elk.portConstraints": "FIXED_ORDER",
         },
+        ports: [
+          ...inputPorts,
+          ...outputPorts,
+        ],
       };
+
     });
 
     const elkEdges = edges.map((edge) => ({
       id: edge.id,
-      sources: [edge.source],
-      targets: [edge.target],
+      sources: [edge.sourceHandle || edge.source],
+      targets: [edge.targetHandle || edge.target],
     }));
 
     // Create ELK graph structure
@@ -419,7 +441,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
         "elk.spacing.nodeNode": "25",
         "elk.layered.spacing.nodeNodeBetweenLayers": "100",
         "elk.aspectRatio": "3",
-        "elk.layered.nodePlacement.strategy": "SIMPLE",
+        //"elk.layered.nodePlacement.strategy": "SIMPLE",
       },
       children: elkNodes,
       edges: elkEdges,
