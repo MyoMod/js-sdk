@@ -14,6 +14,7 @@ import {
   addEdge,
   OnConnect,
   OnEdgesDelete,
+  useReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { BaseNode, NodePort } from "./nodeTypes/BaseNode";
@@ -24,6 +25,7 @@ import { DeviceNode } from "./nodeTypes/DeviceNode";
 import { AlgorithmicNode } from "./nodeTypes/AlgorithmicNode";
 import DevTools from "../configurationManager/Devtools";
 import ELK from "elkjs/lib/elk.bundled.js";
+import { temp } from "three/webgpu";
 
 // Define configuration data type
 interface ConfigurationData {
@@ -43,9 +45,9 @@ interface ConfigurationViewerProps {
 }
 
 // Define base node types
-const baseNodeTypes : {
+const baseNodeTypes: {
   [key: string]: React.FC<any>;
-}= {
+} = {
   deviceNode: DeviceNode,
   algorithmicNode: AlgorithmicNode,
   embeddedDeviceNode: EmbeddedDeviceNode,
@@ -72,6 +74,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
   const [nodeTypes, setNodeTypes] = useState(baseNodeTypes);
   const [nodePortTypes, setNodePortTypes] = useState<NodeTypes>({});
   const [isLayouting, setIsLayouting] = useState(false);
+  const [showNodeMenu, setShowNodeMenu] = useState(false);
 
   // Helper function to create ports from node definition
   const createPorts = (node: any) => {
@@ -150,14 +153,14 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
       let nodeArray: string;
       let nodeIndex: number;
 
-      if (nodeId.startsWith('e')) {
-        nodeArray = 'embeddedDeviceNodes';
+      if (nodeId.startsWith("e")) {
+        nodeArray = "embeddedDeviceNodes";
         nodeIndex = parseInt(nodeId.substring(1));
-      } else if (nodeId.startsWith('d')) {
-        nodeArray = 'deviceNodes';
+      } else if (nodeId.startsWith("d")) {
+        nodeArray = "deviceNodes";
         nodeIndex = parseInt(nodeId.substring(1));
-      } else if (nodeId.startsWith('a')) {
-        nodeArray = 'algorithmicNodes';
+      } else if (nodeId.startsWith("a")) {
+        nodeArray = "algorithmicNodes";
         nodeIndex = parseInt(nodeId.substring(1));
       } else {
         console.error(`Unknown node ID format: ${nodeId}`);
@@ -166,11 +169,11 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
 
       // Create a deep clone of the config data to avoid direct mutation
       const updatedConfig = JSON.parse(JSON.stringify(configData));
-      
+
       // Update the option in the node
       if (updatedConfig[nodeArray] && updatedConfig[nodeArray][nodeIndex]) {
         updatedConfig[nodeArray][nodeIndex][optionName] = newValue;
-        
+
         // Notify parent of the configuration change
         onConfigChange(updatedConfig);
       }
@@ -180,7 +183,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
 
   // Function to generate node types from node definitions
   const generateNodeTypes = useCallback(() => {
-    const newNodeTypes : { [key: string]: any } = { ...baseNodeTypes };
+    const newNodeTypes: { [key: string]: any } = { ...baseNodeTypes };
     const newNodePortTypes: NodeTypes = {};
 
     // Process device nodes
@@ -197,7 +200,6 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
         <DeviceNode
           {...props}
           data={{
-            ...props.data,
             ...node,
             inputs: inputPorts,
             outputs: outputPorts,
@@ -205,9 +207,9 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
             outputGroups,
             nodeIndex: index,
             nodeType: "deviceNode",
-            nodeID: node.example_id,
             shortDescription: node?.short,
             onOptionsChange: handleNodeOptionChange,
+            ...props.data,
           }}
         />
       );
@@ -227,7 +229,6 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
         <EmbeddedDeviceNode
           {...props}
           data={{
-            ...props.data,
             ...node,
             inputs: inputPorts,
             outputs: outputPorts,
@@ -235,8 +236,8 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
             outputGroups,
             nodeIndex: index,
             nodeType: "embeddedDeviceNode",
-            nodeID: node.example_id,
             onOptionsChange: handleNodeOptionChange,
+            ...props.data,
           }}
         />
       );
@@ -256,7 +257,6 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
         <AlgorithmicNode
           {...props}
           data={{
-            ...props.data,
             ...node,
             inputs: inputPorts,
             outputs: outputPorts,
@@ -265,6 +265,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
             nodeIndex: index,
             nodeType: "algorithmicNode",
             onOptionsChange: handleNodeOptionChange,
+            ...props.data,
           }}
         />
       );
@@ -360,8 +361,12 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
     const targetNode = nodes.find((node) => node.id === connection.target);
 
     // Check if both nodes exist and have valid types
-    if (!sourceNode?.type || !targetNode?.type || 
-        !nodePortTypes[sourceNode.type] || !nodePortTypes[targetNode.type]) {
+    if (
+      !sourceNode?.type ||
+      !targetNode?.type ||
+      !nodePortTypes[sourceNode.type] ||
+      !nodePortTypes[targetNode.type]
+    ) {
       return false;
     }
 
@@ -390,7 +395,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
 
   // Handle new connections
   const onConnect = useCallback(
-    (params: Edge |Connection) => {
+    (params: Edge | Connection) => {
       // Create a new edge with the connection params
       const newEdges = addEdge(
         {
@@ -437,7 +442,6 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
 
     setIsLayouting(true);
 
-    // TODO: Properly add handles to elk nodes to improve auto-layout
     // Convert nodes and edges to ELK format
     const elkNodes = nodes.map((node) => {
       const nInputPorts = nodePortTypes[node.type]?.inputs.length || 0;
@@ -464,12 +468,8 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
         properties: {
           "org.eclipse.elk.portConstraints": "FIXED_ORDER",
         },
-        ports: [
-          ...inputPorts,
-          ...outputPorts,
-        ],
+        ports: [...inputPorts, ...outputPorts],
       };
-
     });
 
     const elkEdges = edges.map((edge) => ({
@@ -522,6 +522,155 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
     }
   }, [nodes, edges, setNodes, isLayouting]);
 
+  // Group node definitions by type
+  const nodesByCategory = useMemo(() => {
+    return {
+      deviceNodes: nodeDefinitions.deviceNodes,
+      embeddedDeviceNodes: nodeDefinitions.embeddedDeviceNodes,
+      algorithmicNodes: nodeDefinitions.algorithmicNodes,
+    };
+  }, []);
+
+  // Add a new node to the flow
+  const handleAddNode = useCallback(
+    (nodeType: string, category: string) => {
+      if (!configData || !onConfigChange) return;
+
+      // Get the array name based on category
+      const arrayName = category as keyof Pick<
+        ConfigurationData,
+        "deviceNodes" | "embeddedDeviceNodes" | "algorithmicNodes"
+      >;
+
+      // Find the node definition
+      const nodeDef = nodeDefinitions[arrayName].find(
+        (n: any) => n.type === nodeType
+      );
+      if (!nodeDef) return;
+
+      // Generate a temporary ID for the node based on its category
+      let tempId: string;
+      if (arrayName === "embeddedDeviceNodes") {
+        tempId = `e_`;
+      } else if (arrayName === "deviceNodes") {
+        tempId = `d_`;
+      } else {
+        tempId = `a_`;
+      }
+
+      // Get default node data
+      const defaultNodeData: any = nodeDef.example;
+
+      // If ID is defined, set it to "Test"
+      const nodeID = "New Node";
+
+      const newReactFlowNode: Node = {
+        id: tempId,
+        type: nodeType,
+        position: {
+          x: 300,
+          y: 300,
+        },
+        data: {
+          type: nodeType,
+          configData: defaultNodeData,
+          id: tempId,
+          nodeID: arrayName !== "algorithmicNodes" ? nodeID : undefined,
+        },
+      };
+
+      // Add the new node to the ReactFlow instance
+      setNodes((nds) => nds.concat(newReactFlowNode));
+
+      // Close the menu
+      setShowNodeMenu(false);
+    },
+    [configData, onConfigChange, setNodes]
+  );
+
+  // Handle node ids
+  useEffect(() => {
+    // Skip if we're still loading or if there are no nodes
+    if (isLoading || nodes.length === 0) return;
+
+    // Check if there are any temporary IDs that need fixing
+    const hasTemporaryIds = nodes.some((node) => node.id.includes("_"));
+    if (!hasTemporaryIds) return;
+
+    // Count existing nodes by prefix to determine next available IDs
+    const prefixCounts = {
+      e: nodes.filter((n) => n.id[0] === "e" && !n.id.includes("_")).length,
+      d: nodes.filter((n) => n.id[0] === "d" && !n.id.includes("_")).length,
+      a: nodes.filter((n) => n.id[0] === "a" && !n.id.includes("_")).length,
+    };
+
+    // Create a map to store new IDs for temporary nodes
+    const idMap: Record<string, string> = {};
+
+    // Generate new nodes with proper IDs
+    const updatedNodes = nodes.map((node) => {
+      if (node.id.includes("_")) {
+        const prefix = node.id[0];
+        const newId = `${prefix}${prefixCounts[
+          prefix as keyof typeof prefixCounts
+        ]++}`;
+        idMap[node.id] = newId;
+
+        return {
+          ...node,
+          id: newId,
+          data: {
+            ...node.data,
+            id: newId,
+          },
+        };
+      }
+      return node;
+    });
+
+    // Update edges to use the new node IDs
+    const updatedEdges = edges.map((edge) => {
+      let newEdge = { ...edge };
+
+      if (edge.source in idMap) {
+        newEdge.source = idMap[edge.source];
+        if (edge.sourceHandle) {
+          newEdge.sourceHandle = edge.sourceHandle.replace(
+            edge.source,
+            idMap[edge.source]
+          );
+        }
+      }
+
+      if (edge.target in idMap) {
+        newEdge.target = idMap[edge.target];
+        if (edge.targetHandle) {
+          newEdge.targetHandle = edge.targetHandle.replace(
+            edge.target,
+            idMap[edge.target]
+          );
+        }
+      }
+
+      // Update edge ID if source or target changed
+      if (newEdge.source !== edge.source || newEdge.target !== edge.target) {
+        newEdge.id = `${newEdge.source}-${newEdge.sourceHandle
+          ?.split("-")
+          .pop()}-${newEdge.target}-${newEdge.targetHandle?.split("-").pop()}`;
+      }
+
+      return newEdge;
+    });
+
+    // Update nodes and edges with corrected IDs
+    setNodes(updatedNodes);
+    if (
+      updatedEdges.some((e) => e !== edges.find((orig) => orig.id === e.id))
+    ) {
+      setEdges(updatedEdges);
+    }
+  }, [nodes, edges, setNodes, setEdges, isLoading]);
+
   // Initialize node types once
   useEffect(() => {
     const [customNodeTypes, customNodePortTypes] = generateNodeTypes();
@@ -566,7 +715,12 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
               x: 200 + (index % 3) * 300,
               y: 100 + Math.floor(index / 3) * 200,
             },
-            data: { type: nodeType, configData: node.nodeData, id: nodeId },
+            data: {
+              type: nodeType,
+              configData: node.nodeData,
+              id: nodeId,
+              nodeID: node.nodeData.ID,
+            },
           };
         });
         setNodes(newNodes);
@@ -575,7 +729,6 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
         setEdges(newEdges);
 
         setIsLoading(false);
-
       } catch (error) {
         console.error("Error handling configuration data:", error);
         setIsLoading(false); // Make sure to set loading to false even if there's an error
@@ -614,20 +767,20 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
 
   // Minimap colorization
   function nodeColor(node: any) {
-  switch (node.data?.id?.[0]) {
-    case 'e':
-      // Embedded Device Node
-      return '#e8f5e9';
-    case 'a':
-      // Algorithmic Node
-      return '#fff8e1';
-    case 'd':
-      // Device Node
-      return '#e3f2fd';
-    default:
-      return '#000000';
+    switch (node.data?.id?.[0]) {
+      case "e":
+        // Embedded Device Node
+        return "#e8f5e9";
+      case "a":
+        // Algorithmic Node
+        return "#fff8e1";
+      case "d":
+        // Device Node
+        return "#e3f2fd";
+      default:
+        return "#000000";
+    }
   }
-}
 
   return (
     <div style={containerStyles}>
@@ -680,7 +833,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
           isValidConnection={isValidConnection}
         >
           <Controls />
-          <MiniMap pannable draggable nodeColor={nodeColor}/>
+          <MiniMap pannable draggable nodeColor={nodeColor} />
           <Background color="#aaa" gap={16} />
           <Panel position="top-left">
             <div style={{ display: "flex", gap: "8px" }}>
@@ -730,6 +883,89 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
                 <LayoutIcon />
                 {isLayouting ? "Applying Layout..." : "Auto Layout"}
               </button>
+
+              <div style={{ position: "relative" }}>
+                <button
+                  onClick={() => setShowNodeMenu(!showNodeMenu)}
+                  style={{
+                    background: "#673ab7",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "4px",
+                    padding: "8px 12px",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    boxShadow: "0 2px 5px rgba(0,0,0,0.15)",
+                  }}
+                >
+                  <AddNodeIcon />
+                  Add Node
+                </button>
+
+                {showNodeMenu && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "100%",
+                      left: 0,
+                      zIndex: 10,
+                      backgroundColor: "white",
+                      borderRadius: "4px",
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                      marginTop: "4px",
+                      width: "280px",
+                      maxHeight: "400px",
+                      overflowY: "auto",
+                      padding: "8px 0",
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: "0 12px 8px",
+                        borderBottom: "1px solid #eee",
+                      }}
+                    >
+                      <h4
+                        style={{
+                          margin: "0 0 8px",
+                          color: "#444",
+                        }}
+                      >
+                        Add New Node
+                      </h4>
+                    </div>
+
+                    {/* Device Nodes */}
+                    <NodeCategorySection
+                      title="Device Nodes"
+                      nodes={nodesByCategory.deviceNodes}
+                      category="deviceNodes"
+                      color="#2196f3"
+                      onSelect={handleAddNode}
+                    />
+
+                    {/* Embedded Device Nodes */}
+                    <NodeCategorySection
+                      title="Embedded Devices"
+                      nodes={nodesByCategory.embeddedDeviceNodes}
+                      category="embeddedDeviceNodes"
+                      color="#4caf50"
+                      onSelect={handleAddNode}
+                    />
+
+                    {/* Algorithmic Nodes */}
+                    <NodeCategorySection
+                      title="Algorithmic Nodes"
+                      nodes={nodesByCategory.algorithmicNodes}
+                      category="algorithmicNodes"
+                      color="#ffc107"
+                      onSelect={handleAddNode}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           </Panel>
           <Panel position="top-right">
@@ -854,6 +1090,82 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
   );
 };
 
+// Node category section component
+const NodeCategorySection = ({
+  title,
+  nodes,
+  category,
+  color,
+  onSelect,
+}: {
+  title: string;
+  nodes: any[];
+  category: string;
+  color: string;
+  onSelect: (type: string, category: string) => void;
+}) => {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div style={{ margin: "4px 0" }}>
+      <div
+        style={{
+          padding: "8px 12px",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          borderLeft: `4px solid ${color}`,
+          backgroundColor: expanded ? "#f5f5f5" : "transparent",
+        }}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div style={{ fontWeight: 500 }}>{title}</div>
+        <div>{expanded ? "▼" : "►"}</div>
+      </div>
+
+      {expanded && (
+        <div style={{ padding: "4px 0" }}>
+          {nodes.map((node) => (
+            <div
+              key={node.type}
+              style={{
+                padding: "6px 12px 6px 24px",
+                cursor: "pointer",
+                fontSize: "14px",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                color: "#333",
+                "&:hover": {
+                  backgroundColor: "#f0f0f0",
+                },
+              }}
+              onClick={() => onSelect(node.type, category)}
+              onMouseOver={(e) => {
+                (e.target as HTMLElement).style.backgroundColor = "#f0f0f0";
+              }}
+              onMouseOut={(e) => {
+                (e.target as HTMLElement).style.backgroundColor = "transparent";
+              }}
+            >
+              <div
+                style={{
+                  width: "12px",
+                  height: "12px",
+                  backgroundColor: color,
+                  borderRadius: "2px",
+                }}
+              />
+              <div>{node.name || node.type}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Simple icon components for fullscreen buttons
 const FullscreenIcon = () => (
   <svg
@@ -901,5 +1213,23 @@ const LayoutIcon = () => (
     <rect x="14" y="3" width="7" height="7"></rect>
     <rect x="14" y="14" width="7" height="7"></rect>
     <rect x="3" y="14" width="7" height="7"></rect>
+  </svg>
+);
+
+// Add node icon component
+const AddNodeIcon = () => (
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+    <line x1="12" y1="8" x2="12" y2="16"></line>
+    <line x1="8" y1="12" x2="16" y2="12"></line>
   </svg>
 );
