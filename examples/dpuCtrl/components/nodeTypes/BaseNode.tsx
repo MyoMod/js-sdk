@@ -40,7 +40,7 @@ export interface BaseNodeData {
   };
   options?: Record<string, any | NodeOption>;
   nodeType: string;
-  onOptionsChange?: (updatedOptions: Record<string, any>) => void;
+  onOptionsChange?: (nodeId: string, key: string, value: any) => void;
   configData: any; // data loaded from the config file
 }
 
@@ -136,7 +136,7 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
 
       // If we were provided with an onOptionsChange callback, call it
       if (data.onOptionsChange) {
-        data.onOptionsChange(newOptions);
+        data.onOptionsChange(id, key, newValue);
       }
     }
 

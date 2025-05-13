@@ -141,6 +141,43 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
     };
   };
 
+  // Handle node option changes
+  const handleNodeOptionChange = useCallback(
+    (nodeId: string, optionName: string, newValue: any) => {
+      if (!configData || !onConfigChange) return;
+
+      // Find which array the node belongs to based on its ID prefix
+      let nodeArray: string;
+      let nodeIndex: number;
+
+      if (nodeId.startsWith('e')) {
+        nodeArray = 'embeddedDeviceNodes';
+        nodeIndex = parseInt(nodeId.substring(1));
+      } else if (nodeId.startsWith('d')) {
+        nodeArray = 'deviceNodes';
+        nodeIndex = parseInt(nodeId.substring(1));
+      } else if (nodeId.startsWith('a')) {
+        nodeArray = 'algorithmicNodes';
+        nodeIndex = parseInt(nodeId.substring(1));
+      } else {
+        console.error(`Unknown node ID format: ${nodeId}`);
+        return;
+      }
+
+      // Create a deep clone of the config data to avoid direct mutation
+      const updatedConfig = JSON.parse(JSON.stringify(configData));
+      
+      // Update the option in the node
+      if (updatedConfig[nodeArray] && updatedConfig[nodeArray][nodeIndex]) {
+        updatedConfig[nodeArray][nodeIndex][optionName] = newValue;
+        
+        // Notify parent of the configuration change
+        onConfigChange(updatedConfig);
+      }
+    },
+    [configData, onConfigChange]
+  );
+
   // Function to generate node types from node definitions
   const generateNodeTypes = useCallback(() => {
     const newNodeTypes : { [key: string]: any } = { ...baseNodeTypes };
@@ -170,6 +207,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
             nodeType: "deviceNode",
             nodeID: node.example_id,
             shortDescription: node?.short,
+            onOptionsChange: handleNodeOptionChange,
           }}
         />
       );
@@ -198,6 +236,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
             nodeIndex: index,
             nodeType: "embeddedDeviceNode",
             nodeID: node.example_id,
+            onOptionsChange: handleNodeOptionChange,
           }}
         />
       );
@@ -225,6 +264,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
             outputGroups,
             nodeIndex: index,
             nodeType: "algorithmicNode",
+            onOptionsChange: handleNodeOptionChange,
           }}
         />
       );
@@ -319,8 +359,14 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
     const sourceNode = nodes.find((node) => node.id === connection.source);
     const targetNode = nodes.find((node) => node.id === connection.target);
 
-    const sourcePortTypes = nodePortTypes[sourceNode?.type].outputs;
-    const targetPortTypes = nodePortTypes[targetNode?.type].inputs;
+    // Check if both nodes exist and have valid types
+    if (!sourceNode?.type || !targetNode?.type || 
+        !nodePortTypes[sourceNode.type] || !nodePortTypes[targetNode.type]) {
+      return false;
+    }
+
+    const sourcePortTypes = nodePortTypes[sourceNode.type].outputs;
+    const targetPortTypes = nodePortTypes[targetNode.type].inputs;
 
     const sourcePortIndex = Number(connection.sourceHandle?.split("-").pop());
     const targetPortIndex = Number(connection.targetHandle?.split("-").pop());
@@ -528,8 +574,8 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
         const newEdges = generateEdges(configData);
         setEdges(newEdges);
 
-        // Set loading to false immediately after nodes and edges are set
         setIsLoading(false);
+
       } catch (error) {
         console.error("Error handling configuration data:", error);
         setIsLoading(false); // Make sure to set loading to false even if there's an error
