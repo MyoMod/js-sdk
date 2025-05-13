@@ -382,7 +382,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
               x: 200 + (index % 3) * 300,
               y: 100 + Math.floor(index / 3) * 200,
             },
-            data: { ...node.nodeData, id: nodeId },
+            data: { type: nodeType, configData: node.nodeData, id: nodeId },
           };
         });
         setNodes(newNodes);

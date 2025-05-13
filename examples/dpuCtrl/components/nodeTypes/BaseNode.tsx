@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { Handle, Position } from "@xyflow/react";
+import "./BaseNode.css";
+import { bool } from "three/webgpu";
 
 export interface NodePort {
   name: string;
@@ -37,6 +39,8 @@ export interface BaseNodeData {
   };
   options?: Record<string, any | NodeOption>;
   nodeType: string;
+  onOptionsChange?: (updatedOptions: Record<string, any>) => void;
+  configData: any; // data loaded from the config file
 }
 
 interface BaseNodeProps {
@@ -63,13 +67,290 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
     options,
     id,
     nodeID,
-    nodeType,
+    configData,
   } = data;
 
   // State to track which group's description is being shown
   const [hoveredGroup, setHoveredGroup] = useState<string | null>(null);
   // State to track if full description should be shown
   const [showFullDescription, setShowFullDescription] = useState(false);
+  // State to track which option is being edited
+  const [editingOption, setEditingOption] = useState<string | null>(null);
+  // State to store temporary option values while editing
+  const [editedValues, setEditedValues] = useState<Record<string, any>>({});
+
+  // Function to handle option editing
+  const handleEditOption = (key: string, currentValue: any) => {
+    setEditingOption(key);
+    setEditedValues({
+      ...editedValues,
+      [key]: currentValue,
+    });
+  };
+
+  // Function to save edited option
+  const saveOption = (key: string) => {
+    if (data.options) {
+      // Create a copy of the options object
+      const newOptions = { ...data.options };
+
+      // Update the value
+      if (typeof newOptions[key] === "object" && newOptions[key] !== null) {
+        newOptions[key] = {
+          ...newOptions[key],
+          default: editedValues[key],
+        };
+      } else {
+        newOptions[key] = editedValues[key];
+      }
+
+      // If we were provided with an onOptionsChange callback, call it
+      if (data.onOptionsChange) {
+        data.onOptionsChange(newOptions);
+      } else {
+        console.warn(
+          "No onOptionsChange callback provided, option changes won't be saved"
+        );
+      }
+    }
+
+    // Exit edit mode
+    setEditingOption(null);
+  };
+
+  // Function to cancel editing
+  const cancelEdit = () => {
+    setEditingOption(null);
+  };
+
+  // Option Input Components
+  const OptionEnumInput: React.FC<{
+    optionKey: string;
+    values: any[];
+    currentValue: any;
+    borderColor: string;
+    onChange: (key: string, value: any) => void;
+  }> = ({ optionKey, values, currentValue, borderColor, onChange }) => {
+    const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+      let newValue: any = e.target.value;
+
+      // Handle boolean conversion
+      if (newValue === "true" || newValue === "false") {
+        newValue = newValue === "true";
+      }
+
+      onChange(optionKey, newValue);
+    };
+
+    return (
+      <select
+        value={currentValue.toString()}
+        onChange={handleChange}
+        className="option-input"
+        style={{ border: `1px solid ${borderColor}` }}
+      >
+        {values.map((val) => (
+          <option key={val} value={val.toString()}>
+            {val.toString()}
+          </option>
+        ))}
+      </select>
+    );
+  };
+
+  const OptionNumberInput: React.FC<{
+    optionKey: string;
+    valueInfo: {
+      isInterger: boolean;
+      min?: number;
+      max?: number;
+    };
+    currentValue: number;
+    borderColor: string;
+    onChange: (key: string, value: number) => void;
+  }> = ({ optionKey, valueInfo, currentValue, borderColor, onChange }) => {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      let newValue: number = parseFloat(e.target.value);
+      if (isNaN(newValue)) newValue = 0;
+
+      // Apply constraints if defined
+      if (valueInfo.min !== undefined && newValue < valueInfo.min)
+        newValue = valueInfo.min;
+      if (valueInfo.max !== undefined && newValue > valueInfo.max)
+        newValue = valueInfo.max;
+
+      // For integers, round the value
+      if (valueInfo.isInterger) {
+        newValue = Math.round(newValue);
+      }
+
+      onChange(optionKey, newValue);
+    };
+
+    return (
+      <input
+        type="number"
+        value={currentValue}
+        onChange={handleChange}
+        className="option-input"
+        style={{ border: `1px solid ${borderColor}` }}
+        min={valueInfo.min}
+        max={valueInfo.max}
+        step={valueInfo.isInterger ? 1 : 0.01}
+      />
+    );
+  };
+
+  const OptionTextInput: React.FC<{
+    optionKey: string;
+    currentValue: string;
+    borderColor: string;
+    onChange: (key: string, value: string) => void;
+  }> = ({ optionKey, currentValue, borderColor, onChange }) => {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      onChange(optionKey, e.target.value);
+    };
+
+    return (
+      <input
+        type="text"
+        value={currentValue}
+        onChange={handleChange}
+        className="option-input"
+        style={{ border: `1px solid ${borderColor}` }}
+      />
+    );
+  };
+
+  // Main option entry component
+  const OptionEntry: React.FC<{
+    optionKey: string;
+    param: any;
+    isEditing: boolean;
+    onEdit: () => void;
+    onSave: () => void;
+    onCancel: () => void;
+    borderColor: string;
+    value: any;
+  }> = ({
+    optionKey,
+    param,
+    isEditing,
+    onEdit,
+    onSave,
+    onCancel,
+    borderColor,
+    value,
+  }) => {
+    const valueType = param.type;
+    const displayValue =
+      typeof value === "boolean" ? value.toString() : value ?? "-";
+
+    // Handle option value changes
+    const handleValueChange = (key: string, value: any) => {
+      setEditedValues({
+        ...editedValues,
+        [key]: value,
+      });
+    };
+
+    // Render the appropriate input component based on the value type
+    const renderInputComponent = () => {
+      // Make sure we have a valid edited value, or initialize it
+      if (editedValues[optionKey] === undefined) {
+        setEditedValues({
+          ...editedValues,
+          [optionKey]: value,
+        });
+      }
+
+      // Handle enum type (including boolean)
+      if (valueType === "enum" || valueType === "boolean") {
+        const values = valueType === "boolean" ? [true, false] : param.values;
+        return (
+          <OptionEnumInput
+            optionKey={optionKey}
+            values={values}
+            currentValue={editedValues[optionKey]}
+            borderColor={borderColor}
+            onChange={handleValueChange}
+          />
+        );
+      }
+
+      // Handle number types
+      if (["float32", "uint8", "int8", "int32", "uint32"].includes(valueType)) {
+        const valueInfo = {
+          isInterger: valueType !== "float32",
+          min: param.min,
+          max: param.max,
+        };
+        return (
+          <OptionNumberInput
+            optionKey={optionKey}
+            valueInfo={valueInfo}
+            currentValue={editedValues[optionKey]}
+            borderColor={borderColor}
+            onChange={handleValueChange}
+          />
+        );
+      }
+
+      // Default: text input
+      return (
+        <OptionTextInput
+          optionKey={optionKey}
+          currentValue={editedValues[optionKey]}
+          borderColor={borderColor}
+          onChange={handleValueChange}
+        />
+      );
+    };
+
+    return (
+      <div className={`option-row ${isEditing ? "option-row-editing" : ""}`}>
+        <span>{optionKey}:</span>
+
+        {isEditing ? (
+          <div className="option-controls">
+            {renderInputComponent()}
+
+            <button
+              onClick={onSave}
+              className="save-button"
+              style={{ backgroundColor: borderColor }}
+              title="Save changes"
+            >
+              ✓
+            </button>
+
+            <button
+              onClick={onCancel}
+              className="cancel-button"
+              title="Cancel editing"
+            >
+              ✕
+            </button>
+          </div>
+        ) : (
+          <div className="option-controls">
+            <span className="option-value" title={displayValue}>
+              {displayValue}
+            </span>
+
+            <button
+              onClick={onEdit}
+              className="edit-button"
+              style={{ color: borderColor }}
+              title="Edit option"
+            >
+              ✏️
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // Group ports by their groupKey
   const groupedInputs =
@@ -108,34 +389,20 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
 
   return (
     <div
+      className="base-node"
       style={{
-        padding: "10px",
-        borderRadius: "5px",
         backgroundColor: style.backgroundColor,
         border: `1px solid ${style.borderColor}`,
-        minWidth: "200px",
-        maxWidth: "250px",
       }}
     >
-      <div
-        style={{
-          fontWeight: "bold",
-          fontSize: "14px",
-          marginBottom: "5px",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
+      <div className="node-header">
         {name} {nodeID && <span>[{nodeID}]</span>}
         {labelText && (
           <span
+            className="node-label"
             style={{
-              fontSize: "10px",
               backgroundColor: style.labelBackgroundColor || style.borderColor,
               color: style.labelTextColor || "white",
-              padding: "2px 6px",
-              borderRadius: "10px",
             }}
           >
             {labelText}
@@ -143,14 +410,10 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
         )}
       </div>
 
-      {/* Display shortDescription by default, or full description if requested */}
       <div
-        style={{
-          fontSize: "12px",
-          color: "#555",
-          marginBottom: "10px",
-          cursor: description ? "pointer" : "default",
-        }}
+        className={`node-description ${
+          description ? "description-clickable" : ""
+        }`}
         onClick={() =>
           description && setShowFullDescription(!showFullDescription)
         }
@@ -167,12 +430,8 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
           shortDescription &&
           description !== shortDescription && (
             <span
-              style={{
-                color: style.borderColor,
-                fontSize: "10px",
-                marginLeft: "5px",
-                fontStyle: "italic",
-              }}
+              className="description-more"
+              style={{ color: style.borderColor }}
             >
               {showFullDescription ? " (less)" : " (more...)"}
             </span>
@@ -184,70 +443,35 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
       {/* Render ports section with grouped inputs and outputs */}
       {(Object.keys(groupedInputs).length > 0 ||
         Object.keys(groupedOutputs).length > 0) && (
-        <div style={{ position: "relative" }}>
-          {/* Side-by-side layout for inputs and outputs */}
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <div className="ports-container">
+          <div className="ports-layout">
             {/* Input ports section */}
             {Object.keys(groupedInputs).length > 0 && (
-              <div style={{ flex: 1, marginRight: "8px" }}>
-                <div
-                  style={{
-                    fontSize: "12px",
-                    fontWeight: "bold",
-                    marginBottom: "5px",
-                  }}
-                >
-                  Inputs:
-                </div>
+              <div className="ports-section ports-section-left">
+                <div className="ports-title">Inputs:</div>
 
                 {Object.entries(groupedInputs).map(([groupKey, ports]) => {
                   const group = inputGroups?.[groupKey];
                   return (
                     <div
                       key={groupKey}
-                      style={{
-                        marginBottom: "12px",
-                        position: "relative",
-                        backgroundColor:
-                          groupKey === hoveredGroup
-                            ? "rgba(0,0,0,0.05)"
-                            : "transparent",
-                        padding: "4px",
-                        borderRadius: "4px",
-                      }}
+                      className={`port-group ${
+                        groupKey === hoveredGroup ? "port-group-hovered" : ""
+                      }`}
                       onMouseEnter={() => setHoveredGroup(groupKey)}
                       onMouseLeave={() => setHoveredGroup(null)}
                     >
                       {/* Group header with name and type */}
                       {group && (
-                        <div
-                          style={{
-                            fontSize: "11px",
-                            fontWeight: "bold",
-                            marginBottom: "3px",
-                          }}
-                        >
+                        <div className="group-header">
                           {group.name}{" "}
-                          <span style={{ color: "#666" }}>({group.type})</span>
+                          <span className="group-type">({group.type})</span>
                         </div>
                       )}
 
                       {/* Description tooltip */}
                       {groupKey === hoveredGroup && group?.description && (
-                        <div
-                          style={{
-                            position: "absolute",
-                            left: "-5px",
-                            top: "-30px",
-                            backgroundColor: "rgba(0,0,0,0.8)",
-                            color: "white",
-                            padding: "2px 5px",
-                            borderRadius: "3px",
-                            fontSize: "10px",
-                            maxWidth: "150px",
-                            zIndex: 10,
-                          }}
-                        >
+                        <div className="group-tooltip input-tooltip">
                           {group.description}
                         </div>
                       )}
@@ -256,10 +480,7 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
                       {ports.map((port, portIndex) => (
                         <div
                           key={`input-${portIndex}`}
-                          style={{
-                            position: "relative",
-                            padding: "0px 0 0px 15px",
-                          }}
+                          className="port-container port-container-input"
                         >
                           <Handle
                             type="target"
@@ -267,7 +488,7 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
                             id={`${id}-input-${port.index}`}
                             style={{ background: style.borderColor, left: 0 }}
                           />
-                          <div style={{ fontSize: "11px" }}>{port.name}</div>
+                          <div className="port-name">{port.name}</div>
                         </div>
                       ))}
                     </div>
@@ -278,68 +499,31 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
 
             {/* Output ports section */}
             {Object.keys(groupedOutputs).length > 0 && (
-              <div style={{ flex: 1, marginLeft: "8px" }}>
-                <div
-                  style={{
-                    fontSize: "12px",
-                    fontWeight: "bold",
-                    marginBottom: "5px",
-                    textAlign: "right",
-                  }}
-                >
-                  Outputs:
-                </div>
+              <div className="ports-section ports-section-right">
+                <div className="ports-title ports-title-right">Outputs:</div>
 
                 {Object.entries(groupedOutputs).map(([groupKey, ports]) => {
                   const group = outputGroups?.[groupKey];
                   return (
                     <div
                       key={groupKey}
-                      style={{
-                        marginBottom: "12px",
-                        position: "relative",
-                        backgroundColor:
-                          groupKey === hoveredGroup
-                            ? "rgba(0,0,0,0.05)"
-                            : "transparent",
-                        padding: "4px",
-                        borderRadius: "4px",
-                        textAlign: "right",
-                      }}
+                      className={`port-group port-group-right ${
+                        groupKey === hoveredGroup ? "port-group-hovered" : ""
+                      }`}
                       onMouseEnter={() => setHoveredGroup(groupKey)}
                       onMouseLeave={() => setHoveredGroup(null)}
                     >
                       {/* Group header with name and type */}
                       {group && (
-                        <div
-                          style={{
-                            fontSize: "11px",
-                            fontWeight: "bold",
-                            marginBottom: "3px",
-                            textAlign: "right",
-                          }}
-                        >
+                        <div className="group-header group-header-right">
                           {group.name}{" "}
-                          <span style={{ color: "#666" }}>({group.type})</span>
+                          <span className="group-type">({group.type})</span>
                         </div>
                       )}
 
                       {/* Description tooltip */}
                       {groupKey === hoveredGroup && group?.description && (
-                        <div
-                          style={{
-                            position: "absolute",
-                            right: "-5px",
-                            top: "-30px",
-                            backgroundColor: "rgba(0,0,0,0.8)",
-                            color: "white",
-                            padding: "2px 5px",
-                            borderRadius: "3px",
-                            fontSize: "10px",
-                            maxWidth: "150px",
-                            zIndex: 10,
-                          }}
-                        >
+                        <div className="group-tooltip output-tooltip">
                           {group.description}
                         </div>
                       )}
@@ -348,11 +532,7 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
                       {ports.map((port, portIndex) => (
                         <div
                           key={`output-${portIndex}`}
-                          style={{
-                            position: "relative",
-                            padding: "0px 20px 0px 0",
-                            textAlign: "right",
-                          }}
+                          className="port-container port-container-output"
                         >
                           <Handle
                             type="source"
@@ -360,7 +540,7 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
                             id={`${id}-output-${port.index}`}
                             style={{ background: style.borderColor, right: 0 }}
                           />
-                          <div style={{ fontSize: "11px" }}>{port.name}</div>
+                          <div className="port-name">{port.name}</div>
                         </div>
                       ))}
                     </div>
@@ -374,38 +554,21 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
 
       {/* Render options if any */}
       {options && Object.keys(options).length > 0 && (
-        <div
-          style={{
-            marginTop: "10px",
-            borderTop: "1px dashed #ccc",
-            paddingTop: "5px",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "12px",
-              fontWeight: "bold",
-              marginBottom: "5px",
-            }}
-          >
-            Options:
-          </div>
-          {Object.entries(options).map(([key, value]) => (
-            <div
+        <div className="options-section">
+          <div className="options-header">Options:</div>
+
+          {Object.entries(options).map(([key, params]) => (
+            <OptionEntry
               key={key}
-              style={{
-                fontSize: "11px",
-                display: "flex",
-                justifyContent: "space-between",
-              }}
-            >
-              <span>{key}:</span>
-              <span style={{ color: "#666" }}>
-                {typeof value === "object"
-                  ? (value as NodeOption).default || "-"
-                  : value}
-              </span>
-            </div>
+              optionKey={key}
+              param={params}
+              isEditing={editingOption === key}
+              onEdit={() => handleEditOption(key, params.default)}
+              onSave={() => saveOption(key)}
+              onCancel={cancelEdit}
+              borderColor={style.borderColor}
+              value={editedValues[key] ?? configData[key] ?? params.default}
+            />
           ))}
         </div>
       )}
