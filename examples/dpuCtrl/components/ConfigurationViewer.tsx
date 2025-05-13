@@ -328,6 +328,14 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
     // Check if we have valid port indexes
     if (isNaN(sourcePortIndex) || isNaN(targetPortIndex)) return false;
 
+    // Check if one of the port types is dynamic
+    if (
+      sourcePortTypes[sourcePortIndex] === "dynamic" ||
+      targetPortTypes[targetPortIndex] === "dynamic"
+    ) {
+      return true; // Allow dynamic connections
+    }
+
     // Check if the port types match
     return (
       sourcePortTypes[sourcePortIndex] === targetPortTypes[targetPortIndex]
