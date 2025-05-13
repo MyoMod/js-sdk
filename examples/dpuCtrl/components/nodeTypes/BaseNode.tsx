@@ -172,7 +172,7 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
       <select
         value={currentValue.toString()}
         onChange={handleChange}
-        className="option-input"
+        className="option-input nodrag"
         style={{ border: `1px solid ${borderColor}` }}
       >
         {values.map((val) => (
