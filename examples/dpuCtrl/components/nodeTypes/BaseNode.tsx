@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Handle, Position } from "@xyflow/react";
+import UnaryHandle from "./UnaryHandle";
 import "./BaseNode.css";
 import { bool } from "three/webgpu";
 
@@ -513,7 +514,7 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
                           key={`input-${portIndex}`}
                           className="port-container port-container-input"
                         >
-                          <Handle
+                          <UnaryHandle
                             type="target"
                             position={Position.Left}
                             id={`${id}-input-${port.index}`}
