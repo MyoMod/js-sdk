@@ -27,6 +27,12 @@
           "name": "Filtered EMG Data",
           "names": ["A", "B", "C", "D", "E", "F"],
           "description": "Transmits filtered EMG data to the host"
+        },
+        {
+          "number": 1,
+          "type": "float32",
+          "name": "Filter Progress",
+          "description": "Transmits Filter progress to the host"
         }
       ],
       "outputs": [],
@@ -198,6 +204,12 @@
           "name": "Filtered EMG",
           "names": ["A", "B", "C", "D", "E", "F"],
           "description": "Processed and filtered EMG signal, scaled to 0-1 range"
+        },
+        {
+          "number": 1,
+          "type": "float32",
+          "name": "Filter Progress",
+          "description": "Progress of the adaptive filter, indicating if the filter is still adapting"
         }
       ],
       "options": {},
