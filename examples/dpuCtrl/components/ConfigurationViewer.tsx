@@ -19,6 +19,7 @@ import { EmbeddedDeviceNode } from "./nodeTypes/EmbeddedDeviceNode";
 import { DeviceNode } from "./nodeTypes/DeviceNode";
 import { AlgorithmicNode } from "./nodeTypes/AlgorithmicNode";
 import DevTools from "../configurationManager/Devtools";
+import ELK from "elkjs/lib/elk.bundled.js";
 
 // Define configuration data type
 interface ConfigurationData {
@@ -43,6 +44,9 @@ const baseNodeTypes = {
   embeddedDeviceNode: EmbeddedDeviceNode,
 };
 
+// Create an instance of ELK
+const elk = new ELK();
+
 export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
   configData,
 }) => {
@@ -51,6 +55,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [nodeTypes, setNodeTypes] = useState(baseNodeTypes);
+  const [isLayouting, setIsLayouting] = useState(false);
 
   // Helper function to create ports from node definition
   const createPorts = (node: any) => {
@@ -196,49 +201,6 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
     return newNodeTypes;
   }, []);
 
-  // Function to generate placeholder nodes for the initial view
-  const generatePlaceholderNodes = useCallback(() => {
-    const placeholderNodes: Node[] = [];
-    let yPos = 50;
-
-    // Device nodes placeholders
-    nodeDefinitions.deviceNodes.forEach((node, index) => {
-      placeholderNodes.push({
-        id: `d${index}`,
-        type: node.type,
-        position: { x: 100, y: yPos },
-        data: { label: node.name || `Device ${index}` },
-      });
-      yPos += 200;
-    });
-
-    // Embedded device nodes placeholders
-    yPos = 50;
-    nodeDefinitions.embeddedDeviceNodes.forEach((node, index) => {
-      placeholderNodes.push({
-        id: `e${index}`,
-        type: node.type,
-        position: { x: 400, y: yPos },
-        data: { label: node.name || `Embedded ${index}` },
-      });
-      yPos += 200;
-    });
-
-    // Algorithmic nodes placeholders
-    yPos = 50;
-    nodeDefinitions.algorithmicNodes.forEach((node, index) => {
-      placeholderNodes.push({
-        id: `a${index}`,
-        type: node.type,
-        position: { x: 700, y: yPos },
-        data: { label: node.name || `Algorithm ${index}` },
-      });
-      yPos += 200;
-    });
-
-    return placeholderNodes;
-  }, []);
-
   // Toggle full screen mode
   const toggleFullScreen = useCallback(() => {
     setIsFullScreen((prev) => !prev);
@@ -286,6 +248,97 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
     return newEdges;
   }, []);
 
+  // Function to apply automatic layout using ELK
+  const applyLayout = useCallback(async () => {
+    if (nodes.length === 0) return;
+
+    // Prevent multiple layout operations at the same time
+    if (isLayouting) return;
+
+    setIsLayouting(true);
+
+    // TODO: Properly add handles to elk nodes to improve auto-layout
+    // Convert nodes and edges to ELK format
+    const elkNodes = nodes.map((node) => {
+      // const outputPorts = nodeTypes[node.type].data.outputs;
+      // const targetPorts = node.data.targetHandles.map((t) => ({
+      //   id: t.id,
+
+      //   // ⚠️ it's important to let elk know on which side the port is
+      //   // in this example targets are on the left (WEST) and sources on the right (EAST)
+      //   properties: {
+      //     side: "WEST",
+      //   },
+      // }));
+
+      // const sourcePorts = node.data.sourceHandles.map((s) => ({
+      //   id: s.id,
+      //   properties: {
+      //     side: "EAST",
+      //   },
+      // }));
+
+      return {
+        id: node.id,
+        width: node.measured.width,
+        height: node.measured.height,
+        // ports: [...targetPorts, ...sourcePorts],
+        properties: {
+          "org.eclipse.elk.portConstraints": "FIXED_ORDER",
+        },
+      };
+    });
+
+    const elkEdges = edges.map((edge) => ({
+      id: edge.id,
+      sources: [edge.source],
+      targets: [edge.target],
+    }));
+
+    // Create ELK graph structure
+    const elkGraph = {
+      id: "root",
+      layoutOptions: {
+        "elk.algorithm": "layered",
+        "elk.direction": "RIGHT",
+        "elk.spacing.nodeNode": "25",
+        "elk.layered.spacing.nodeNodeBetweenLayers": "100",
+        "elk.aspectRatio": "3",
+        "elk.layered.nodePlacement.strategy": "SIMPLE",
+      },
+      children: elkNodes,
+      edges: elkEdges,
+    };
+
+    try {
+      // Calculate layout
+      const newGraph = await elk.layout(elkGraph);
+
+      // Apply the layout to the nodes
+      if (newGraph.children) {
+        const layoutedNodes = nodes.map((node) => {
+          const elkNode = newGraph.children?.find((n) => n.id === node.id);
+          if (elkNode && elkNode.x !== undefined && elkNode.y !== undefined) {
+            return {
+              ...node,
+              position: {
+                x: elkNode.x,
+                y: elkNode.y,
+              },
+            };
+          }
+          return node;
+        });
+
+        setNodes(layoutedNodes);
+      }
+    } catch (error) {
+      console.error("Error applying layout:", error);
+    } finally {
+      setIsLayouting(false);
+    }
+  }, [nodes, edges, setNodes, isLayouting]);
+
   // Initialize node types once
   useEffect(() => {
     const customNodeTypes = generateNodeTypes();
@@ -295,10 +348,6 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
   // Process config data when it changes
   useEffect(() => {
     setIsLoading(true);
-
-    // Initialize with placeholder nodes
-    const placeholderNodes = generatePlaceholderNodes();
-    setNodes(placeholderNodes);
 
     // If we have config data, parse it and create edges
     if (configData) {
@@ -333,22 +382,38 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
               x: 200 + (index % 3) * 300,
               y: 100 + Math.floor(index / 3) * 200,
             },
-            data: { ...node.nodeData, nodeIndex: index, id: nodeId },
+            data: { ...node.nodeData, id: nodeId },
           };
         });
         setNodes(newNodes);
 
         const newEdges = generateEdges(configData);
         setEdges(newEdges);
+
+        // Set loading to false immediately after nodes and edges are set
+        setIsLoading(false);
       } catch (error) {
         console.error("Error handling configuration data:", error);
+        setIsLoading(false); // Make sure to set loading to false even if there's an error
       }
     } else {
       setEdges([]);
+      setIsLoading(false); // Set loading to false if there's no config data
     }
+  }, [configData, generateEdges, setNodes, setEdges]);
 
-    setIsLoading(false);
-  }, [configData, generatePlaceholderNodes, generateEdges, setNodes, setEdges]);
+  // Add a dedicated useEffect to make sure spinner is correctly displayed
+  useEffect(() => {
+    // Add a safety timeout to ensure loading state doesn't get stuck
+    const safetyTimer = setTimeout(() => {
+      if (isLoading) {
+        setIsLoading(false);
+        console.warn("Loading state was forced to complete after timeout");
+      }
+    }, 3000); // 3 seconds safety timeout
+
+    return () => clearTimeout(safetyTimer);
+  }, [isLoading]);
 
   // Full screen mode styles
   const containerStyles = isFullScreen
@@ -374,7 +439,26 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
             height: "100%",
           }}
         >
-          Loading configuration...
+          <div style={{ textAlign: "center" }}>
+            <div
+              style={{
+                border: "4px solid rgba(0, 0, 0, 0.1)",
+                borderLeft: "4px solid #3498db",
+                borderRadius: "50%",
+                width: "30px",
+                height: "30px",
+                animation: "spin 1s linear infinite",
+                margin: "0 auto 10px auto",
+              }}
+            ></div>
+            Loading configuration...
+          </div>
+          <style>{`
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}</style>
         </div>
       ) : (
         <ReactFlow
@@ -391,31 +475,54 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
           <MiniMap />
           <Background color="#aaa" gap={16} />
           <Panel position="top-left">
-            <button
-              onClick={toggleFullScreen}
-              style={{
-                background: isFullScreen ? "#ff4757" : "#2196f3",
-                color: "white",
-                border: "none",
-                borderRadius: "4px",
-                padding: "8px 12px",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-                boxShadow: "0 2px 5px rgba(0,0,0,0.15)",
-              }}
-            >
-              {isFullScreen ? (
-                <>
-                  <ExitFullscreenIcon /> Exit Fullscreen
-                </>
-              ) : (
-                <>
-                  <FullscreenIcon /> Fullscreen
-                </>
-              )}
-            </button>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                onClick={toggleFullScreen}
+                style={{
+                  background: isFullScreen ? "#ff4757" : "#2196f3",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "4px",
+                  padding: "8px 12px",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  boxShadow: "0 2px 5px rgba(0,0,0,0.15)",
+                }}
+              >
+                {isFullScreen ? (
+                  <>
+                    <ExitFullscreenIcon /> Exit Fullscreen
+                  </>
+                ) : (
+                  <>
+                    <FullscreenIcon /> Fullscreen
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={applyLayout}
+                disabled={isLayouting}
+                style={{
+                  background: "#4caf50",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "4px",
+                  padding: "8px 12px",
+                  cursor: isLayouting ? "default" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  boxShadow: "0 2px 5px rgba(0,0,0,0.15)",
+                  opacity: isLayouting ? 0.7 : 1,
+                }}
+              >
+                <LayoutIcon />
+                {isLayouting ? "Applying Layout..." : "Auto Layout"}
+              </button>
+            </div>
           </Panel>
           <Panel position="top-right">
             <div
@@ -495,6 +602,40 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
           Press ESC to exit fullscreen
         </div>
       )}
+
+      {/* Loading overlay for layout operation */}
+      {isLayouting && (
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(255,255,255,0.5)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 10,
+            pointerEvents: "none",
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: "white",
+              padding: "16px 24px",
+              borderRadius: "8px",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+            }}
+          >
+            <div className="spinner"></div>
+            <span>Optimizing layout...</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -527,5 +668,24 @@ const ExitFullscreenIcon = () => (
     strokeLinejoin="round"
   >
     <path d="M4 14h3v3m6-9h3V5m0 10v3h3m-9-9V5H4"></path>
+  </svg>
+);
+
+// Layout icon component
+const LayoutIcon = () => (
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <rect x="3" y="3" width="7" height="7"></rect>
+    <rect x="14" y="3" width="7" height="7"></rect>
+    <rect x="14" y="14" width="7" height="7"></rect>
+    <rect x="3" y="14" width="7" height="7"></rect>
   </svg>
 );
