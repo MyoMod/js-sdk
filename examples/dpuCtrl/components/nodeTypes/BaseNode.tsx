@@ -7,7 +7,7 @@ export interface NodePort {
   name: string;
   type: string;
   index: number;
-  groupKey?: string; // Added groupKey to identify the group this port belongs to
+  groupKey?: string;
 }
 
 export interface NodeOption {
@@ -78,13 +78,35 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
   const [editingOption, setEditingOption] = useState<string | null>(null);
   // State to store temporary option values while editing
   const [editedValues, setEditedValues] = useState<Record<string, any>>({});
+  // State to track the current value of the options
+  const [currentValues, setCurrentValues] = useState<Record<string, any>>({});
+  // Initialize current values with configData
+  React.useEffect(() => {
+    if (configData) {
+      const initialValues: Record<string, any> = {};
+      Object.entries(configData).forEach(([key, value]) => {
+        if (options && options[key]) {
+          initialValues[key] = value;
+        }
+      });
+      setCurrentValues(initialValues);
+    }
+  }, [configData, options]);
 
   // Function to handle option editing
-  const handleEditOption = (key: string, currentValue: any) => {
+  const handleEditOption = (key: string) => {
+    // Get the current value from currentValues or fallback to default
+    const value =
+      currentValues[key] !== undefined
+        ? currentValues[key]
+        : options && options[key] && typeof options[key] === "object"
+        ? options[key].default
+        : options?.[key];
+
     setEditingOption(key);
     setEditedValues({
       ...editedValues,
-      [key]: currentValue,
+      [key]: value,
     });
   };
 
@@ -93,24 +115,27 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
     if (data.options) {
       // Create a copy of the options object
       const newOptions = { ...data.options };
+      const newValue = editedValues[key];
 
       // Update the value
       if (typeof newOptions[key] === "object" && newOptions[key] !== null) {
         newOptions[key] = {
           ...newOptions[key],
-          default: editedValues[key],
+          default: newValue,
         };
       } else {
-        newOptions[key] = editedValues[key];
+        newOptions[key] = newValue;
       }
+
+      // Update current values
+      setCurrentValues({
+        ...currentValues,
+        [key]: newValue,
+      });
 
       // If we were provided with an onOptionsChange callback, call it
       if (data.onOptionsChange) {
         data.onOptionsChange(newOptions);
-      } else {
-        console.warn(
-          "No onOptionsChange callback provided, option changes won't be saved"
-        );
       }
     }
 
@@ -231,7 +256,6 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
     onSave: () => void;
     onCancel: () => void;
     borderColor: string;
-    value: any;
   }> = ({
     optionKey,
     param,
@@ -240,11 +264,18 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
     onSave,
     onCancel,
     borderColor,
-    value,
   }) => {
+    // Get current value from currentValues, fallback to default from param
+    const currentValue =
+      currentValues[optionKey] !== undefined
+        ? currentValues[optionKey]
+        : param.default;
+
     const valueType = param.type;
     const displayValue =
-      typeof value === "boolean" ? value.toString() : value ?? "-";
+      typeof currentValue === "boolean"
+        ? currentValue.toString()
+        : currentValue ?? "-";
 
     // Handle option value changes
     const handleValueChange = (key: string, value: any) => {
@@ -260,12 +291,12 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
       if (editedValues[optionKey] === undefined) {
         setEditedValues({
           ...editedValues,
-          [optionKey]: value,
+          [optionKey]: currentValue,
         });
       }
 
       // Handle enum type (including boolean)
-      if (valueType === "enum" || valueType === "boolean") {
+      if (valueType === "enum" || valueType === "boolean" || param.values) {
         const values = valueType === "boolean" ? [true, false] : param.values;
         return (
           <OptionEnumInput
@@ -563,11 +594,10 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
               optionKey={key}
               param={params}
               isEditing={editingOption === key}
-              onEdit={() => handleEditOption(key, params.default)}
+              onEdit={() => handleEditOption(key)}
               onSave={() => saveOption(key)}
               onCancel={cancelEdit}
               borderColor={style.borderColor}
-              value={editedValues[key] ?? configData[key] ?? params.default}
             />
           ))}
         </div>
