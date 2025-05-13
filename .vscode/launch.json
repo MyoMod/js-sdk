@@ -9,7 +9,7 @@
             "request": "launch",
             "name": "Launch Chrome against localhost",
             "url": "http://localhost:5173",
-            "webRoot": "${workspaceFolder}/examples/grapher",
+            "webRoot": "${workspaceFolder}/examples/dpuCtrl",
             "runtimeExecutable": "/snap/bin/chromium",
             "runtimeArgs": [
                 "-remote-debugging-port=9222",
