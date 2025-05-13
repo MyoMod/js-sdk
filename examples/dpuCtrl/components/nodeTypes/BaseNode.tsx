@@ -258,7 +258,7 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
                           key={`input-${portIndex}`}
                           style={{
                             position: "relative",
-                            padding: "3px 0 3px 15px",
+                            padding: "0px 0 0px 15px",
                           }}
                         >
                           <Handle
@@ -350,7 +350,7 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
                           key={`output-${portIndex}`}
                           style={{
                             position: "relative",
-                            padding: "3px 20px 3px 0",
+                            padding: "0px 20px 0px 0",
                             textAlign: "right",
                           }}
                         >
