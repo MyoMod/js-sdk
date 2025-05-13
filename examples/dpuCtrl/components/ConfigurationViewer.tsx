@@ -43,7 +43,9 @@ interface ConfigurationViewerProps {
 }
 
 // Define base node types
-const baseNodeTypes = {
+const baseNodeTypes : {
+  [key: string]: React.FC<any>;
+}= {
   deviceNode: DeviceNode,
   algorithmicNode: AlgorithmicNode,
   embeddedDeviceNode: EmbeddedDeviceNode,
@@ -63,8 +65,8 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
   configData,
   onConfigChange,
 }) => {
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [nodeTypes, setNodeTypes] = useState(baseNodeTypes);
@@ -141,7 +143,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
 
   // Function to generate node types from node definitions
   const generateNodeTypes = useCallback(() => {
-    const newNodeTypes = { ...baseNodeTypes };
+    const newNodeTypes : { [key: string]: any } = { ...baseNodeTypes };
     const newNodePortTypes: NodeTypes = {};
 
     // Process device nodes
@@ -312,7 +314,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
     [configData, onConfigChange]
   );
 
-  const isValidConnection = (connection: Connection) => {
+  const isValidConnection = (connection: Edge | Connection) => {
     // Check if the connection is valid based on the node types and ports
     const sourceNode = nodes.find((node) => node.id === connection.source);
     const targetNode = nodes.find((node) => node.id === connection.target);
@@ -334,7 +336,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
 
   // Handle new connections
   const onConnect = useCallback(
-    (params: Connection) => {
+    (params: Edge |Connection) => {
       // Create a new edge with the connection params
       const newEdges = addEdge(
         {
