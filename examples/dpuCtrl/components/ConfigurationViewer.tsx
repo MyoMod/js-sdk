@@ -49,6 +49,13 @@ const baseNodeTypes = {
   embeddedDeviceNode: EmbeddedDeviceNode,
 };
 
+interface NodeTypes {
+  [key: string]: {
+    inputs: string[];
+    outputs: string[];
+  };
+}
+
 // Create an instance of ELK
 const elk = new ELK();
 
@@ -61,6 +68,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [nodeTypes, setNodeTypes] = useState(baseNodeTypes);
+  const [nodePortTypes, setNodePortTypes] = useState<NodeTypes>({});
   const [isLayouting, setIsLayouting] = useState(false);
 
   // Helper function to create ports from node definition
@@ -134,11 +142,17 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
   // Function to generate node types from node definitions
   const generateNodeTypes = useCallback(() => {
     const newNodeTypes = { ...baseNodeTypes };
+    const newNodePortTypes: NodeTypes = {};
 
     // Process device nodes
     nodeDefinitions.deviceNodes.forEach((node, index) => {
       const { inputPorts, outputPorts, inputGroups, outputGroups } =
         createPorts(node);
+
+      newNodePortTypes[node.type] = {
+        inputs: inputPorts.map((port) => port.type),
+        outputs: outputPorts.map((port) => port.type),
+      };
 
       newNodeTypes[node.type] = (props: any) => (
         <DeviceNode
@@ -164,6 +178,11 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
       const { inputPorts, outputPorts, inputGroups, outputGroups } =
         createPorts(node);
 
+      newNodePortTypes[node.type] = {
+        inputs: inputPorts.map((port) => port.type),
+        outputs: outputPorts.map((port) => port.type),
+      };
+
       newNodeTypes[node.type] = (props: any) => (
         <EmbeddedDeviceNode
           {...props}
@@ -187,6 +206,11 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
       const { inputPorts, outputPorts, inputGroups, outputGroups } =
         createPorts(node);
 
+      newNodePortTypes[node.type] = {
+        inputs: inputPorts.map((port) => port.type),
+        outputs: outputPorts.map((port) => port.type),
+      };
+
       newNodeTypes[node.type] = (props: any) => (
         <AlgorithmicNode
           {...props}
@@ -204,7 +228,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
       );
     });
 
-    return newNodeTypes;
+    return [newNodeTypes, newNodePortTypes];
   }, []);
 
   // Toggle full screen mode
@@ -287,6 +311,26 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
     },
     [configData, onConfigChange]
   );
+
+  const isValidConnection = (connection: Connection) => {
+    // Check if the connection is valid based on the node types and ports
+    const sourceNode = nodes.find((node) => node.id === connection.source);
+    const targetNode = nodes.find((node) => node.id === connection.target);
+
+    const sourcePortTypes = nodePortTypes[sourceNode?.type].outputs;
+    const targetPortTypes = nodePortTypes[targetNode?.type].inputs;
+
+    const sourcePortIndex = Number(connection.sourceHandle?.split("-").pop());
+    const targetPortIndex = Number(connection.targetHandle?.split("-").pop());
+
+    // Check if we have valid port indexes
+    if (isNaN(sourcePortIndex) || isNaN(targetPortIndex)) return false;
+
+    // Check if the port types match
+    return (
+      sourcePortTypes[sourcePortIndex] === targetPortTypes[targetPortIndex]
+    );
+  };
 
   // Handle new connections
   const onConnect = useCallback(
@@ -402,8 +446,9 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
 
   // Initialize node types once
   useEffect(() => {
-    const customNodeTypes = generateNodeTypes();
+    const [customNodeTypes, customNodePortTypes] = generateNodeTypes();
     setNodeTypes(customNodeTypes);
+    setNodePortTypes(customNodePortTypes);
   }, [generateNodeTypes]);
 
   // Process config data when it changes
@@ -537,6 +582,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
           edgesFocusable={true}
           edgesReconnectable={true}
           connectOnClick={true}
+          isValidConnection={isValidConnection}
         >
           <Controls />
           <MiniMap />
