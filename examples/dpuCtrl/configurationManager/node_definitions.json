@@ -122,10 +122,10 @@
       ],
       "options": {
         "amplification": {
-          "type": "float32",
+          "type": "uint8",
           "description": "Signal strength multiplier applied to all channels",
-          "range": "0.1 to 10.0",
-          "default": 1.0
+          "values": [0,1,2,4,8,16,32,64,128],
+          "default": 0
         }
       },
       "example": {
