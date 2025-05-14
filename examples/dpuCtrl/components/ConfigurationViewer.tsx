@@ -308,7 +308,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
       const [sourceNodeId, sourcePort] = source.split(":");
 
       newEdges.push({
-        id: `${sourceNodeId}-${sourcePort}-${targetNodeId}-${targetPort}-${index}`,
+        id: `${sourceNodeId}-${sourcePort}-${targetNodeId}-${targetPort}`,
         source: sourceNodeId,
         target: targetNodeId,
         sourceHandle: `${sourceNodeId}-output-${sourcePort}`,
@@ -589,28 +589,68 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
   );
 
   // Handle node ids
+  // Ids must be unique and there may be no missing ids (e.g., "e0", "e1", "e3" is invalid)
+  // New nodes are created with temporary IDs (e.g., "e_", "d_", "a_"), these need to be replaced with unique IDs
+  // On node deletion we need to check if there are any missing IDs
   useEffect(() => {
     // Skip if we're still loading or if there are no nodes
     if (isLoading || nodes.length === 0) return;
 
+    let needsUpdate = false;
+    let idMap: Record<string, string> = {};
+
     // Check if there are any temporary IDs that need fixing
     const hasTemporaryIds = nodes.some((node) => node.id.includes("_"));
-    if (!hasTemporaryIds) return;
+
+    // Check for gaps in node ID sequences
+    const prefixGroups = {
+      e: nodes
+        .filter((n) => n.id[0] === "e" && !n.id.includes("_"))
+        .map((n) => parseInt(n.id.substring(1)))
+        .sort((a, b) => a - b),
+      d: nodes
+        .filter((n) => n.id[0] === "d" && !n.id.includes("_"))
+        .map((n) => parseInt(n.id.substring(1)))
+        .sort((a, b) => a - b),
+      a: nodes
+        .filter((n) => n.id[0] === "a" && !n.id.includes("_"))
+        .map((n) => parseInt(n.id.substring(1)))
+        .sort((a, b) => a - b),
+    };
+
+    // Check if there are gaps in the ID sequences
+    const hasGaps = Object.entries(prefixGroups).some(([prefix, ids]) => {
+      if (ids.length === 0) return false;
+
+      for (let i = 0; i < ids.length; i++) {
+        if (ids[i] !== i) return true;
+      }
+      return false;
+    });
+
+    // If we have temporary IDs or gaps, we need to update
+    needsUpdate = hasTemporaryIds || hasGaps;
+
+    if (!needsUpdate) return;
 
     // Count existing nodes by prefix to determine next available IDs
     const prefixCounts = {
-      e: nodes.filter((n) => n.id[0] === "e" && !n.id.includes("_")).length,
-      d: nodes.filter((n) => n.id[0] === "d" && !n.id.includes("_")).length,
-      a: nodes.filter((n) => n.id[0] === "a" && !n.id.includes("_")).length,
+      e: 0,
+      d: 0,
+      a: 0,
     };
 
-    // Create a map to store new IDs for temporary nodes
-    const idMap: Record<string, string> = {};
-
-    // Generate new nodes with proper IDs
+    // First pass: Assign new IDs and build ID mapping
     const updatedNodes = nodes.map((node) => {
-      if (node.id.includes("_")) {
-        const prefix = node.id[0];
+      const prefix = node.id[0];
+
+      // Skip invalid prefixes
+      if (!["e", "d", "a"].includes(prefix)) {
+        return node;
+      }
+
+      // If the node has a temporary ID or we're fixing gaps
+      if (node.id.includes("_") || hasGaps) {
         const newId = `${prefix}${prefixCounts[
           prefix as keyof typeof prefixCounts
         ]++}`;
@@ -624,13 +664,17 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
             id: newId,
           },
         };
+      } else {
+        // For nodes that don't need new IDs, still increment the counter
+        prefixCounts[prefix as keyof typeof prefixCounts]++;
+        return node;
       }
-      return node;
     });
 
     // Update edges to use the new node IDs
     const updatedEdges = edges.map((edge) => {
       let newEdge = { ...edge };
+      let edgeChanged = false;
 
       if (edge.source in idMap) {
         newEdge.source = idMap[edge.source];
@@ -640,6 +684,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
             idMap[edge.source]
           );
         }
+        edgeChanged = true;
       }
 
       if (edge.target in idMap) {
@@ -650,10 +695,11 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
             idMap[edge.target]
           );
         }
+        edgeChanged = true;
       }
 
       // Update edge ID if source or target changed
-      if (newEdge.source !== edge.source || newEdge.target !== edge.target) {
+      if (edgeChanged) {
         newEdge.id = `${newEdge.source}-${newEdge.sourceHandle
           ?.split("-")
           .pop()}-${newEdge.target}-${newEdge.targetHandle?.split("-").pop()}`;
@@ -665,7 +711,15 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
     // Update nodes and edges with corrected IDs
     setNodes(updatedNodes);
     if (
-      updatedEdges.some((e) => e !== edges.find((orig) => orig.id === e.id))
+      updatedEdges.some(
+        (e) =>
+          !edges.find(
+            (orig) =>
+              orig.id === e.id &&
+              orig.source === e.source &&
+              orig.target === e.target
+          )
+      )
     ) {
       setEdges(updatedEdges);
     }
@@ -823,6 +877,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
           onConnect={onConnect}
           onReconnect={onConnect}
           onEdgesDelete={onEdgesDelete}
+          onNodesDelete={() => {}}
           nodeTypes={nodeTypes}
           fitView
           attributionPosition="bottom-left"
