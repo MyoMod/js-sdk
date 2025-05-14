@@ -15,6 +15,6 @@ const algorithmicNodeStyle: NodeStyleOptions = {
 
 export const AlgorithmicNode = memo(({ data }: AlgorithmicNodeProps) => {
   return (
-    <BaseNode data={data} labelText="Algorithm" style={algorithmicNodeStyle} />
+    <BaseNode data={data} labelText={data.id} style={algorithmicNodeStyle} />
   );
 });

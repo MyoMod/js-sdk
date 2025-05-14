@@ -18,5 +18,5 @@ const deviceNodeStyle: NodeStyleOptions = {
 };
 
 export const DeviceNode = memo(({ data }: DeviceNodeProps) => {
-  return <BaseNode data={data} labelText="Device" style={deviceNodeStyle} />;
+  return <BaseNode data={data} labelText={data.id} style={deviceNodeStyle} />;
 });

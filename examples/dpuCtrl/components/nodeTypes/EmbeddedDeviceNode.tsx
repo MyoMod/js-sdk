@@ -18,5 +18,5 @@ const embeddedStyle: NodeStyleOptions = {
 };
 
 export const EmbeddedDeviceNode = memo(({ data }: EmbeddedDeviceNodeProps) => {
-  return <BaseNode data={data} labelText="Embedded" style={embeddedStyle} />;
+  return <BaseNode data={data} labelText={data.id} style={embeddedStyle} />;
 });
