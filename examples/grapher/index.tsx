@@ -43,6 +43,12 @@ type FilteredEmgHistory = {
   rawCounter: number;
 };
 
+// Add battery state type
+type BatteryState = {
+  capacity: number;
+  charging: boolean;
+} | null;
+
 const usePoseStore = create<{ 
   pose: MyoModHandPose; 
   raw: DataView;
@@ -99,6 +105,14 @@ const useFilteredEmgStore = create<{
   packetCount: null,
 }));
 
+// Add a battery state store
+const useBatteryStore = create<{
+  batteryState: BatteryState;
+  updateTime: number | null;
+}>(() => ({
+  batteryState: null,
+  updateTime: null,
+}));
 
 // Helper functions that efficiently update history data
 const updatePoseHistory = (pose: MyoModHandPose, history: PoseHistory[], packetCount: number | null) => {
@@ -174,6 +188,13 @@ function App() {
 // Download button component for EMG data
 function DownloadButton() {
   const handleDownload = () => {
+    // Prompt the user for a filename
+    const userFilename = window.prompt("Enter a filename for the EMG data (without extension):", 
+      `emg-data-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}`);
+    
+    // If user cancels or enters an empty filename, abort download
+    if (!userFilename || userFilename.trim() === "") return;
+    
     const emgStore = useEmgStore.getState();
     
     // Convert Float32Arrays to regular arrays for JSON serialization
@@ -197,7 +218,7 @@ function DownloadButton() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `emg-data-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+    link.download = `${userFilename.trim()}.json`;
     
     // Trigger the download
     document.body.appendChild(link);
@@ -236,6 +257,91 @@ function DownloadButton() {
 
 const loadMyoModSymbol = Symbol("loadMyoMod");
 
+// Battery status component
+function BatteryStatusDisplay() {
+  const { batteryState, updateTime } = useBatteryStore();
+  const [expanded, setExpanded] = useState(false);
+  
+  // Calculate time since last update
+  const timeSinceUpdate = updateTime ? 
+    Math.floor((Date.now() - updateTime) / 1000) : null;
+  
+  if (!batteryState) {
+    return null;
+  }
+  
+  return (
+    <div 
+      style={{
+        position: 'absolute',
+        top: '10px',
+        left: '10px',
+        background: expanded ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.7)',
+        padding: expanded ? '12px' : '8px 12px',
+        borderRadius: '5px',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+        display: 'flex',
+        flexDirection: 'column',
+        cursor: 'pointer',
+        zIndex: 10,
+        transition: 'all 0.2s ease'
+      }}
+      onClick={() => setExpanded(!expanded)}
+    >
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <div 
+          style={{ 
+            width: '24px', 
+            height: '12px', 
+            border: '1px solid #333',
+            borderRadius: '2px',
+            position: 'relative',
+            marginRight: '8px'
+          }}
+        >
+          <div 
+            style={{ 
+              position: 'absolute',
+              bottom: '1px',
+              left: '1px',
+              right: '1px',
+              height: `${batteryState.capacity * 0.1 - 0.2}px`, 
+              backgroundColor: batteryState.charging ? '#4CAF50' : 
+                batteryState.capacity > 20 ? '#4CAF50' : '#FF5722',
+              transition: 'height 0.3s ease, background-color 0.3s ease'
+            }} 
+          />
+          <div 
+            style={{ 
+              position: 'absolute',
+              right: '-3px',
+              top: '3px',
+              width: '2px',
+              height: '6px',
+              backgroundColor: '#333',
+              borderRadius: '0 1px 1px 0'
+            }}
+          />
+        </div>
+        <span style={{ fontWeight: 'bold' }}>
+          {batteryState.capacity}%
+          {batteryState.charging && ' ⚡'}
+        </span>
+      </div>
+      
+      {expanded && timeSinceUpdate !== null && (
+        <div style={{ 
+          fontSize: '12px', 
+          marginTop: '8px',
+          color: '#666'
+        }}>
+          Updated {timeSinceUpdate} seconds ago
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Connected() {
   const myoMod = suspend(loadMyoMod, [loadMyoModSymbol]);
   // Create sampling rate states at app level to share them
@@ -244,6 +350,29 @@ function Connected() {
   const [filteredEmgSamplingRate, setFilteredEmgSamplingRate] = useState(1);
   // Replace batch size with framerate controls
   const [updateFramerate, setUpdateFramerate] = useState(30);
+  
+  // Add battery state polling effect
+  useEffect(() => {
+    const pollBatteryState = async () => {
+      try {
+        const batteryState = await myoMod.dpuControl.getBatteryState();
+        useBatteryStore.setState({
+          batteryState,
+          updateTime: Date.now()
+        });
+      } catch (err) {
+        console.error("Error fetching battery state:", err);
+      }
+    };
+    
+    // Poll initially
+    pollBatteryState();
+    
+    // Then poll every minute
+    const interval = setInterval(pollBatteryState, 60000);
+    
+    return () => clearInterval(interval);
+  }, [myoMod]);
   
   return (
     <>
@@ -270,7 +399,7 @@ function Connected() {
         <directionalLight intensity={10} position={[0, 1, 1]} />
         <OrbitControls enablePan={false} />
       </Canvas>
-      <div style={{ position: "absolute", width: "100%", top: "00%", display: "flex", flexDirection: "column", gap: "20px" }}>
+      <div style={{ position: "absolute", width: "100%", top: "5%", display: "flex", flexDirection: "column", gap: "20px" }}>
         {/* <Chart samplingRate={poseSamplingRate} /> */}
         <EmgChart samplingRate={emgSamplingRate} />
         <FilteredEmgChart samplingRate={filteredEmgSamplingRate} />
@@ -287,6 +416,7 @@ function Connected() {
         setUpdateFramerate={setUpdateFramerate}
       />
       <DownloadButton />
+      <BatteryStatusDisplay />
     </>
   );
 }
@@ -321,7 +451,7 @@ function SamplingControls({
       zIndex: 10,
       boxShadow: "0 0 5px rgba(0,0,0,0.2)"
     }}>
-      <div style={{ marginBottom: "10px" }}>
+      {/* <div style={{ marginBottom: "10px" }}>
         <div style={{ fontSize: "14px", marginBottom: "5px" }}>
           Pose sampling: every {poseSamplingRate}th point
         </div>
@@ -362,7 +492,7 @@ function SamplingControls({
           onChange={(e) => setFilteredEmgSamplingRate(parseInt(e.target.value))}
           style={{ width: "200px" }}
         />
-      </div>
+      </div> */}
       <div>
         <div style={{ fontSize: "14px", marginBottom: "5px" }}>
           Graph update rate: {updateFramerate} FPS
@@ -617,7 +747,6 @@ function EmgChart({ samplingRate }: { samplingRate: number }) {
   
   useEffect(() => {
     if (!uPlotRef.current || history.length === 0 || packetCount === null) return;
-    
     // Find the most recent timestamp
     const latestTime = history[history.length - 1].timestamp;
     
