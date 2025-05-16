@@ -1,27 +1,31 @@
 {
     "dependencies": {
         "@myomod/three": "workspace:^",
-        "@react-three/drei": "^9.112.0",
-        "@react-three/fiber": "^8.17.6",
-        "@types/react": "^18.3.5",
-        "@types/react-dom": "^18.3.0",
+        "@react-three/drei": "^9.122.0",
+        "@react-three/fiber": "^8.18.0",
+        "@types/react": "^18.3.21",
+        "@types/react-dom": "^18.3.7",
         "@types/three": "^0.168.0",
         "@types/web-bluetooth": "^0.0.20",
-        "chart.js": "^4.4.1",
-        "leva": "^0.9.35",
+        "chart.js": "^4.4.9",
+        "leva": "^0.9.36",
         "react": "^18.3.1",
-        "react-chartjs-2": "^5.2.0",
+        "react-chartjs-2": "^5.3.0",
         "react-dom": "^18.3.1",
         "suspend-react": "^0.1.3",
         "three": "^0.168.0",
-        "zustand": "5.0.0-rc.2",
-        "uplot": "^1.6.30"
+        "uplot": "^1.6.32",
+        "zustand": "5.0.0-rc.2"
     },
     "scripts": {
+        "predeploy": "npm run build",
+        "deploy": "gh-pages -d dist",
         "dev": "vite",
         "build": "vite build"
     },
     "devDependencies": {
-        "vite": "^5.4.3"
-    }
+        "vite": "^5.4.19",
+        "gh-pages": "6.3.0"
+    },
+    "homepage": "https://myomod.org/js-sdk/"
 }
