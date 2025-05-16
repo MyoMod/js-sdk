@@ -26,53 +26,6 @@ export function DevicesTab({
   
   return (
     <div>
-      <Card title="Single Device Information">
-        <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", alignItems: "center" }}>
-          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-            <label style={{ fontSize: "14px" }}>Device #:</label>
-            <input 
-              type="number" 
-              value={deviceIndexInput} 
-              onChange={(e) => setDeviceIndexInput(e.target.value)}
-              style={inputStyle}
-              min="0"
-            />
-          </div>
-          <button 
-            onClick={handleListConnectedDevices} 
-            disabled={isLoading}
-            style={isLoading ? disabledButtonStyle : buttonStyle}
-          >
-            Get Device Info
-          </button>
-        </div>
-        
-        {devicesList && (
-          <div style={{ marginTop: "12px" }}>
-            <div style={{ marginBottom: "8px", fontSize: "14px" }}>
-              Device <strong>{deviceIndexInput}</strong> of <strong>{devicesList.devicesCount}</strong>
-            </div>
-            <div style={{ fontSize: "14px", color: "#555", marginBottom: "4px" }}>
-              Hash: {devicesList.devicesHash}
-            </div>
-            {devicesList.jsonData && (
-              <div style={{ 
-                overflow: "auto", 
-                border: "1px solid #eee", 
-                padding: "12px",
-                backgroundColor: "#f9f9f9",
-                borderRadius: "4px",
-                fontFamily: "monospace",
-                fontSize: "13px",
-                whiteSpace: "pre-wrap"
-              }}>
-                {devicesList.jsonData}
-              </div>
-            )}
-          </div>
-        )}
-      </Card>
-      
       <Card title="All Connected Devices">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
           <button 
@@ -199,6 +152,53 @@ export function DevicesTab({
                 </pre>
               )}
             </div>
+          </div>
+        )}
+      </Card>
+
+      <Card title="Single Device Information">
+        <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <label style={{ fontSize: "14px" }}>Device #:</label>
+            <input 
+              type="number" 
+              value={deviceIndexInput} 
+              onChange={(e) => setDeviceIndexInput(e.target.value)}
+              style={inputStyle}
+              min="0"
+            />
+          </div>
+          <button 
+            onClick={handleListConnectedDevices} 
+            disabled={isLoading}
+            style={isLoading ? disabledButtonStyle : buttonStyle}
+          >
+            Get Device Info
+          </button>
+        </div>
+        
+        {devicesList && (
+          <div style={{ marginTop: "12px" }}>
+            <div style={{ marginBottom: "8px", fontSize: "14px" }}>
+              Device <strong>{deviceIndexInput}</strong> of <strong>{devicesList.devicesCount}</strong>
+            </div>
+            <div style={{ fontSize: "14px", color: "#555", marginBottom: "4px" }}>
+              Hash: {devicesList.devicesHash}
+            </div>
+            {devicesList.jsonData && (
+              <div style={{ 
+                overflow: "auto", 
+                border: "1px solid #eee", 
+                padding: "12px",
+                backgroundColor: "#f9f9f9",
+                borderRadius: "4px",
+                fontFamily: "monospace",
+                fontSize: "13px",
+                whiteSpace: "pre-wrap"
+              }}>
+                {devicesList.jsonData}
+              </div>
+            )}
           </div>
         )}
       </Card>

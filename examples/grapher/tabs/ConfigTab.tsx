@@ -33,10 +33,77 @@ export function ConfigTab({
   handleSetConfigurationsChunk,
   handleGetAllConfigurationChunks,
 }: ConfigTabProps) {
-  const [viewMode, setViewMode] = useState<"json" | "flow">("json");
+  const [viewMode, setViewMode] = useState<"json" | "flow">("flow");
 
   return (
     <div>
+      <Card title="Complete Configuration">
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "12px",
+          }}
+        >
+          <div>
+            <button
+              onClick={handleGetAllConfigurationChunks}
+              disabled={isLoading}
+              style={isLoading ? disabledButtonStyle : buttonStyle}
+            >
+              {isLoading ? "Loading..." : "Load Complete Configuration"}
+            </button>
+          </div>
+          {completeConfig && (
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                onClick={() => setViewMode("flow")}
+                style={{
+                  ...buttonStyle,
+                  backgroundColor: viewMode === "flow" ? "#4a90e2" : "#f0f0f0",
+                  color: viewMode === "flow" ? "white" : "#333",
+                }}
+              >
+                Flow View
+              </button>
+              <button
+                onClick={() => setViewMode("json")}
+                style={{
+                  ...buttonStyle,
+                  backgroundColor: viewMode === "json" ? "#4a90e2" : "#f0f0f0",
+                  color: viewMode === "json" ? "white" : "#333",
+                }}
+              >
+                JSON View
+              </button>
+            </div>
+          )}
+        </div>
+
+        {completeConfig && viewMode === "json" && (
+          <div
+            style={{
+              maxHeight: "500px",
+              overflow: "auto",
+              border: "1px solid #eee",
+              padding: "12px",
+              backgroundColor: "#f9f9f9",
+              borderRadius: "4px",
+              fontFamily: "monospace",
+              fontSize: "13px",
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {completeConfig}
+          </div>
+        )}
+
+        {completeConfig && viewMode === "flow" && (
+          <ConfigurationViewer configData={JSON.parse(completeConfig)[0]} />
+        )}
+      </Card>
+
       <Card title="Configuration Chunks">
         <div
           style={{
@@ -137,73 +204,6 @@ export function ConfigTab({
               {configChunk.jsonData}
             </div>
           </div>
-        )}
-      </Card>
-
-      <Card title="Complete Configuration">
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "12px",
-          }}
-        >
-          <div>
-            <button
-              onClick={handleGetAllConfigurationChunks}
-              disabled={isLoading}
-              style={isLoading ? disabledButtonStyle : buttonStyle}
-            >
-              {isLoading ? "Loading..." : "Load Complete Configuration"}
-            </button>
-          </div>
-          {completeConfig && (
-            <div style={{ display: "flex", gap: "10px" }}>
-              <button
-                onClick={() => setViewMode("json")}
-                style={{
-                  ...buttonStyle,
-                  backgroundColor: viewMode === "json" ? "#4a90e2" : "#f0f0f0",
-                  color: viewMode === "json" ? "white" : "#333",
-                }}
-              >
-                JSON View
-              </button>
-              <button
-                onClick={() => setViewMode("flow")}
-                style={{
-                  ...buttonStyle,
-                  backgroundColor: viewMode === "flow" ? "#4a90e2" : "#f0f0f0",
-                  color: viewMode === "flow" ? "white" : "#333",
-                }}
-              >
-                Flow View
-              </button>
-            </div>
-          )}
-        </div>
-
-        {completeConfig && viewMode === "json" && (
-          <div
-            style={{
-              maxHeight: "500px",
-              overflow: "auto",
-              border: "1px solid #eee",
-              padding: "12px",
-              backgroundColor: "#f9f9f9",
-              borderRadius: "4px",
-              fontFamily: "monospace",
-              fontSize: "13px",
-              whiteSpace: "pre-wrap",
-            }}
-          >
-            {completeConfig}
-          </div>
-        )}
-
-        {completeConfig && viewMode === "flow" && (
-          <ConfigurationViewer configData={JSON.parse(completeConfig)[0]} />
         )}
       </Card>
     </div>

@@ -18,15 +18,15 @@ const loadMyoModSymbol = Symbol("loadMyoMod");
 export function Connected() {
   const myoMod = suspend(() => loadMyoMod(), [loadMyoModSymbol]);
   const [activeView, setActiveView] = useState<'emgGrapher' | 'dpuControl'>('dpuControl');
-//   return (
-//     <>
-//     {activeView === 'emgGrapher' ? (
-//         <EmgGrapher myoMod={myoMod} />
-//       ) : (
-//         <DpuControlApp myoMod={myoMod} />
-//       )}
-//     </>
-//   )
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Toggle fullscreen function
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      // Enter fullscreen
+      document.documentElement.requestFullscreen().then(() => {
+        setIsFullscreen(true);
+      }).catch(err => {
 
   
   return (
@@ -45,6 +45,21 @@ export function Connected() {
         borderRadius: "5px",
         boxShadow: "0 2px 5px rgba(0, 0, 0, 0.1)"
       }}>
+        <button
+          onClick={() => setActiveView('dpuControl')}
+          style={{
+            padding: "8px 16px",
+            backgroundColor: activeView === 'dpuControl' ? "#4CAF50" : "#e0e0e0",
+            color: activeView === 'dpuControl' ? "white" : "black",
+            border: "none",
+            borderRadius: "4px",
+            cursor: "pointer",
+            fontWeight: activeView === 'dpuControl' ? "bold" : "normal",
+            transition: "all 0.2s ease"
+          }}
+        >
+          DPU Control
+        </button>
         <button
           onClick={() => setActiveView('emgGrapher')}
           style={{
