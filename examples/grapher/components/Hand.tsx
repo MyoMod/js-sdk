@@ -2,12 +2,21 @@ import { useRef, useEffect } from "react";
 import { MyoMod, MyoModHandPose, MyoModEmgData, MyoModFilteredEmgData } from "@myomod/three";
 import { usePoseStore, useEmgStore, useFilteredEmgStore, updatePoseHistory, updateEmgHistory, updateFilteredEmgHistory } from "../store";
 
+// Define interface for data stream subscription controls
+interface DataStreamControls {
+  subscribeToHandPose?: boolean;
+  subscribeToRawEmg?: boolean;
+  subscribeToFilteredEmg?: boolean;
+}
+
 export function Hand({ 
   myoMod, 
-  updateFramerate 
+  updateFramerate,
+  dataStreams = { subscribeToFilteredEmg: true }
 }: { 
   myoMod: MyoMod,
-  updateFramerate: number
+  updateFramerate: number,
+  dataStreams?: DataStreamControls
 }) {
   // Create refs to store incoming data
   const poseDataRef = useRef<{pose: MyoModHandPose, raw: DataView}[]>([]);
@@ -136,62 +145,76 @@ export function Hand({
   }, [updateFramerate]);  // Restart the loop when framerate changes
 
   useEffect(() => {
-    console.log("Subscribing to MyoMod data streams");
-    const poseUnsubscribe = myoMod.subscribeHandPose((pose, raw) => {
-      // Just collect the data, processing happens in the animation frame
-      const deepCopyPose = { ...pose };
-      poseDataRef.current.push({ pose: deepCopyPose, raw });
-      
-      // Limit buffer size to prevent memory issues (keep last 1000 samples at most)
-      if (poseDataRef.current.length > 1000) {
-        poseDataRef.current = poseDataRef.current.slice(-1000);
-      }
-    });
+    console.log("Subscribing to MyoMod data streams:", dataStreams);
     
-    const emgUnsubscribe = myoMod.subscribeEmgData((emg, counter, raw) => {
-      // Create deep copies of Float32Arrays for EMG data
-      const emgDeepCopy: MyoModEmgData = {
-        chnA: new Float32Array(emg.chnA),
-        chnB: new Float32Array(emg.chnB),
-        chnC: new Float32Array(emg.chnC),
-        chnD: new Float32Array(emg.chnD),
-        chnE: new Float32Array(emg.chnE),
-        chnF: new Float32Array(emg.chnF),
-      };
-      
-      // Collect data
-      emgDataRef.current.push({ emg: emgDeepCopy, counter, raw });
-      
-      // Limit buffer size
-      if (emgDataRef.current.length > 1000) {
-        emgDataRef.current = emgDataRef.current.slice(-1000);
-      }
-    });
+    // Track unsubscribe functions
+    const unsubscribeFunctions: (() => void)[] = [];
     
-    const filteredEmgUnsubscribe = myoMod.subscribeFilteredEmgData((filteredEmg, counter, raw) => {
-      // Create deep copy for filtered EMG data
-      const filteredEmgDeepCopy: MyoModFilteredEmgData = {
-        data: new Float32Array(filteredEmg.data),
-        state: filteredEmg.state
-      };
-      
-      // Collect data
-      filteredEmgDataRef.current.push({ filteredEmg: filteredEmgDeepCopy, counter, raw });
-      
-      // Limit buffer size
-      if (filteredEmgDataRef.current.length > 1000) {
-        filteredEmgDataRef.current = filteredEmgDataRef.current.slice(-1000);
-      }
-    });
+    // Subscribe to hand pose data if enabled
+    if (dataStreams.subscribeToHandPose) {
+      const poseUnsubscribe = myoMod.subscribeHandPose((pose, raw) => {
+        // Just collect the data, processing happens in the animation frame
+        const deepCopyPose = { ...pose };
+        poseDataRef.current.push({ pose: deepCopyPose, raw });
+        
+        // Limit buffer size to prevent memory issues (keep last 1000 samples at most)
+        if (poseDataRef.current.length > 1000) {
+          poseDataRef.current = poseDataRef.current.slice(-1000);
+        }
+      });
+      unsubscribeFunctions.push(poseUnsubscribe);
+    }
     
-    // Cleanup function
+    // Subscribe to EMG data if enabled
+    if (dataStreams.subscribeToRawEmg) {
+      const emgUnsubscribe = myoMod.subscribeEmgData((emg, counter, raw) => {
+        // Create deep copies of Float32Arrays for EMG data
+        const emgDeepCopy: MyoModEmgData = {
+          chnA: new Float32Array(emg.chnA),
+          chnB: new Float32Array(emg.chnB),
+          chnC: new Float32Array(emg.chnC),
+          chnD: new Float32Array(emg.chnD),
+          chnE: new Float32Array(emg.chnE),
+          chnF: new Float32Array(emg.chnF),
+        };
+        
+        // Collect data
+        emgDataRef.current.push({ emg: emgDeepCopy, counter, raw });
+        
+        // Limit buffer size
+        if (emgDataRef.current.length > 1000) {
+          emgDataRef.current = emgDataRef.current.slice(-1000);
+        }
+      });
+      unsubscribeFunctions.push(emgUnsubscribe);
+    }
+    
+    // Subscribe to filtered EMG data if enabled
+    if (dataStreams.subscribeToFilteredEmg) {
+      const filteredEmgUnsubscribe = myoMod.subscribeFilteredEmgData((filteredEmg, counter, raw) => {
+        // Create deep copy for filtered EMG data
+        const filteredEmgDeepCopy: MyoModFilteredEmgData = {
+          data: new Float32Array(filteredEmg.data),
+          state: filteredEmg.state
+        };
+        
+        // Collect data
+        filteredEmgDataRef.current.push({ filteredEmg: filteredEmgDeepCopy, counter, raw });
+        
+        // Limit buffer size
+        if (filteredEmgDataRef.current.length > 1000) {
+          filteredEmgDataRef.current = filteredEmgDataRef.current.slice(-1000);
+        }
+      });
+      unsubscribeFunctions.push(filteredEmgUnsubscribe);
+    }
+    
+    // Cleanup function: call all unsubscribe functions
     return () => {
-        console.log("Unsubscribing from MyoMod data streams");
-      poseUnsubscribe();
-      emgUnsubscribe();
-      filteredEmgUnsubscribe();
+      console.log("Unsubscribing from MyoMod data streams: ", dataStreams);
+      unsubscribeFunctions.forEach(unsubscribe => unsubscribe());
     };
-  }, [myoMod]);
+  }, [myoMod, dataStreams]); // Add dataStreams to dependency array
   
   return null;
 }

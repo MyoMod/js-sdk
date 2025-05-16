@@ -18,12 +18,21 @@ interface EmgGrapherProps {
 }
 
 export function EmgGrapher({ myoMod }: EmgGrapherProps) {
-    // Create sampling rate states at app level to share them
+  // Create sampling rate states at app level to share them
   const [poseSamplingRate, setPoseSamplingRate] = useState(5);
   const [emgSamplingRate, setEmgSamplingRate] = useState(1);
   const [filteredEmgSamplingRate, setFilteredEmgSamplingRate] = useState(1);
   // Replace batch size with framerate controls
   const [updateFramerate, setUpdateFramerate] = useState(30);
+  
+  // Add state for diagram visibility
+  const [showFilteredEmg, setShowFilteredEmg] = useState(true);
+  // Only activate showRawEmg by default on desktop, deactivate on mobile
+  const [showRawEmg, setShowRawEmg] = useState(() => {
+    // Simple check for mobile device
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    return !isMobile; // Return true for desktop, false for mobile
+  });
   
   // Add battery state polling effect
   useEffect(() => {
@@ -65,6 +74,12 @@ export function EmgGrapher({ myoMod }: EmgGrapherProps) {
           <Hand 
             myoMod={myoMod} 
             updateFramerate={updateFramerate}
+            dataStreams={
+              { 
+                subscribeToFilteredEmg: showFilteredEmg, 
+                subscribeToRawEmg: showRawEmg 
+              }
+            }
           />
         </Suspense>
           
@@ -73,10 +88,58 @@ export function EmgGrapher({ myoMod }: EmgGrapherProps) {
         <directionalLight intensity={10} position={[0, 1, 1]} />
         <OrbitControls enablePan={false} />
       </Canvas>
+      
+      {/* Chart Visibility Toggles */}
+      <div style={{
+        position: "absolute",
+        top: "70px",
+        right: "10px",
+        zIndex: 10,
+        display: "flex",
+        flexDirection: "column",
+        gap: "8px",
+        background: "rgba(255,255,255,0.8)",
+        padding: "10px",
+        borderRadius: "5px",
+        boxShadow: "0 0 5px rgba(0,0,0,0.2)"
+      }}>
+        <div style={{ fontSize: "14px", fontWeight: "bold", marginBottom: "5px" }}>
+          Toggle Charts:
+        </div>
+        <label style={{ 
+          display: "flex", 
+          alignItems: "center", 
+          cursor: "pointer",
+          padding: "4px 0"
+        }}>
+          <input
+            type="checkbox"
+            checked={showFilteredEmg}
+            onChange={() => setShowFilteredEmg(!showFilteredEmg)}
+            style={{ marginRight: "8px" }}
+          />
+          <span>Filtered EMG</span>
+        </label>
+        <label style={{ 
+          display: "flex", 
+          alignItems: "center", 
+          cursor: "pointer",
+          padding: "4px 0"
+        }}>
+          <input
+            type="checkbox"
+            checked={showRawEmg}
+            onChange={() => setShowRawEmg(!showRawEmg)}
+            style={{ marginRight: "8px" }}
+          />
+          <span>Raw EMG</span>
+        </label>
+      </div>
+      
       <div style={{ position: "absolute", width: "100%", top: "5%", display: "flex", flexDirection: "column", gap: "20px" }}>
-        {/* <Chart samplingRate={poseSamplingRate} /> */}
-        <EmgChart samplingRate={emgSamplingRate} />
-        <FilteredEmgChart samplingRate={filteredEmgSamplingRate} />
+        {/* Only show charts if their visibility is toggled on */}
+        {showFilteredEmg && <FilteredEmgChart samplingRate={filteredEmgSamplingRate} />}
+        {showRawEmg && <EmgChart samplingRate={emgSamplingRate} />}
       </div>
       <SamplingControls 
         poseSamplingRate={poseSamplingRate}
