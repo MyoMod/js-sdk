@@ -27,7 +27,8 @@
     },
     "devDependencies": {
         "vite": "^5.4.19",
-        "gh-pages": "6.3.0"
+        "gh-pages": "6.3.0",
+        "vite-plugin-mkcert": "^1.17.8"
     },
     "homepage": "https://myomod.org/js-sdk/"
 }
