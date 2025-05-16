@@ -73,7 +73,7 @@ export function DpuControlApp({ myoMod }: DpuControlAppProps) {
         borderRadius: 8,
         boxShadow: "0 2px 10px rgba(0,0,0,0.15)",
         zIndex: 100,
-        maxWidth: "800px",
+        //maxWidth: "800px",
         width: "90%",
         maxHeight: "90vh",
         overflow: "auto"
