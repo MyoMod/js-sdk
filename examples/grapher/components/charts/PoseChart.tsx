@@ -2,7 +2,7 @@ import { useRef, useEffect } from "react";
 import uPlot from "uplot";
 import { usePoseStore } from "../../store";
 
-export function Chart({ samplingRate }: { samplingRate: number }) {
+export function PoseChart({ samplingRate }: { samplingRate: number }) {
   const { history, packetCount } = usePoseStore();
   const chartRef = useRef<HTMLDivElement>(null);
   const uPlotRef = useRef<uPlot | null>(null);
