@@ -417,6 +417,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
   const applyLayout = useCallback(async () => {
     if (!configData || !onConfigChange) return;
     if (nodes.length === 0) return;
+    if (nodes[0].measured === undefined) return;
 
     // Prevent multiple layout operations at the same time
     if (isLayouting) return;
@@ -510,15 +511,13 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
           ...configData,
           positions: updatedPositions,
         });
-
-
       }
     } catch (error) {
       console.error("Error applying layout:", error);
     } finally {
       setIsLayouting(false);
     }
-  }, [nodes, edges, setNodes, isLayouting, configData, onConfigChange]);
+  }, [nodes, edges, isLayouting, configData, onConfigChange]);
 
   // Group node definitions by type
   const nodesByCategory = useMemo(() => {
@@ -597,10 +596,9 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
     setIsLoading(true);
 
     // If we have config data, parse it and create edges
-    if (configData) {
-      try {
-        // Generate nodes based on the configuration
-        const configNodes: {
+    try {
+      // Generate nodes based on the configuration
+      const configNodes: {
           id: string;
           nodeData: any;
         }[] = [
@@ -663,18 +661,29 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
             animated: false,
           });
         });
-        setEdges(newEdges);
+      setEdges(newEdges);
 
-        setIsLoading(false);
-      } catch (error) {
-        console.error("Error handling configuration data:", error);
-        setIsLoading(false); // Make sure to set loading to false even if there's an error
-      }
-    } else {
-      setEdges([]);
-      setIsLoading(false); // Set loading to false if there's no config data
+      setIsLoading(false);
+
+    } catch (error) {
+      console.error("Error handling configuration data:", error);
+      setIsLoading(false); // Make sure to set loading to false even if there's an error
     }
   }, [configData, setNodes, setEdges]);
+
+
+  // Apply layout when nodes and edges are ready and have no positions set
+  useEffect(() => {
+    if(!configData || configData.positions) return;
+    if(nodes.length === 0) return;
+    if(edges.length === 0) return;
+
+    applyLayout();
+
+    // Set initial positions for nodes via configData
+  }, [nodes, edges, configData, applyLayout]);
+
+
 
   // Add a dedicated useEffect to make sure spinner is correctly displayed
   useEffect(() => {
