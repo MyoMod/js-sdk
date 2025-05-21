@@ -404,7 +404,10 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
 
       // Update the position in the config data
       if (updatedConfig.positions) {
-        updatedConfig.positions[node.id] = node.position;
+        updatedConfig.positions[node.id] = {
+          x: Math.round(node.position.x),
+          y: Math.round(node.position.y),
+        };
       }
 
       // Notify parent of the configuration change
@@ -500,8 +503,8 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
         const updatedPositions = layoutedNodes.reduce((acc, node) => {
           if (node.position.x !== undefined && node.position.y !== undefined) {
             acc[node.id] = {
-              x: node.position.x,
-              y: node.position.y
+              x: Math.round(node.position.x),
+              y: Math.round(node.position.y),
             };
           }
           return acc;
