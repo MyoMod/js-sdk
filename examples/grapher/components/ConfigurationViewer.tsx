@@ -214,7 +214,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
             nodeIndex: index,
             nodeType: "deviceNode",
             shortDescription: node?.short,
-            onOptionsChange: handleNodeOptionChange,
+            onOptionsChange: props.data.onOptionChange,
             ...props.data,
           }}
         />
@@ -242,7 +242,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
             outputGroups,
             nodeIndex: index,
             nodeType: "embeddedDeviceNode",
-            onOptionsChange: handleNodeOptionChange,
+            onOptionsChange: props.data.onOptionChange,
             ...props.data,
           }}
         />
@@ -270,7 +270,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
             outputGroups,
             nodeIndex: index,
             nodeType: "algorithmicNode",
-            onOptionsChange: handleNodeOptionChange,
+            onOptionsChange: props.data.onOptionChange,
             ...props.data,
           }}
         />
@@ -278,7 +278,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
     });
 
     return [newNodeTypes, newNodePortTypes];
-  }, [handleNodeOptionChange]);
+  }, []);
 
   // Toggle full screen mode
   const toggleFullScreen = useCallback(() => {
@@ -355,7 +355,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
       const newLinks = {
         ...configData.links,
         [targetPort]: sourcePort,
-      }
+      };
 
       // Send updated links to parent component
       onConfigChange({
@@ -372,14 +372,15 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
       if (!configData || !onConfigChange) return;
 
       const linksToRemove: { [key: string]: string } = {};
-      
+
       edgesToDelete.forEach((edge) => {
-        const [ sourceNode, sourcePortIndex, targetNode, targetPortIndex] = edge.id.split("-");
+        const [sourceNode, sourcePortIndex, targetNode, targetPortIndex] =
+          edge.id.split("-");
         const sourcePort = `${sourceNode}:${sourcePortIndex}`;
         const targetPort = `${targetNode}:${targetPortIndex}`;
         linksToRemove[targetPort] = sourcePort;
       });
-      
+
       // Create a new links object without the deleted edges
       const newLinks = { ...configData.links };
       Object.keys(linksToRemove).forEach((key) => {
@@ -602,68 +603,68 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
     try {
       // Generate nodes based on the configuration
       const configNodes: {
-          id: string;
-          nodeData: any;
-        }[] = [
-          ...configData.embeddedDeviceNodes.map((node, index) => ({
-            id: `e${index}`,
-            nodeData: node,
-          })),
-          ...configData.deviceNodes.map((node, index) => ({
-            id: `d${index}`,
-            nodeData: node,
-          })),
-          ...configData.algorithmicNodes.map((node, index) => ({
-            id: `a${index}`,
-            nodeData: node,
-          })),
-        ];
+        id: string;
+        nodeData: any;
+      }[] = [
+        ...configData.embeddedDeviceNodes.map((node, index) => ({
+          id: `e${index}`,
+          nodeData: node,
+        })),
+        ...configData.deviceNodes.map((node, index) => ({
+          id: `d${index}`,
+          nodeData: node,
+        })),
+        ...configData.algorithmicNodes.map((node, index) => ({
+          id: `a${index}`,
+          nodeData: node,
+        })),
+      ];
 
-        const newNodes: Node[] = configNodes.map((node, index) => {
-          const nodeType = node.nodeData.type;
-          const nodeId = node.id;
+      const newNodes: Node[] = configNodes.map((node, index) => {
+        const nodeType = node.nodeData.type;
+        const nodeId = node.id;
 
+        const position = (configData.positions &&
+          configData.positions[nodeId]) || {
+          x: 200 + (index % 3) * 300,
+          y: 100 + Math.floor(index / 3) * 200,
+        };
 
-          const position = (configData.positions && configData.positions[nodeId]) || {
-            x: 200 + (index % 3) * 300,
-            y: 100 + Math.floor(index / 3) * 200,
-            };
-
-
-          return {
-            id: nodeId,
+        return {
+          id: nodeId,
+          type: nodeType,
+          position: position,
+          data: {
             type: nodeType,
-            position: position,
-            data: {
-              type: nodeType,
-              configData: node.nodeData,
-              id: nodeId,
-              nodeID: node.nodeData.ID,
-            },
-          };
+            configData: node.nodeData,
+            id: nodeId,
+            nodeID: node.nodeData.ID,
+            onOptionChange: handleNodeOptionChange,
+          },
+        };
+      });
+      setNodes(newNodes);
+
+      const newEdges: Edge[] = [];
+
+      // Iterate through each link in the configuration
+      // and create edges based on the source and target nodes
+      // and their respective ports
+      Object.entries(configData.links).forEach(([target, source], index) => {
+        // Parse target and source strings (format: "nodeType+index:port")
+        const [targetNodeId, targetPort] = target.split(":");
+        const [sourceNodeId, sourcePort] = source.split(":");
+
+        newEdges.push({
+          id: `${sourceNodeId}-${sourcePort}-${targetNodeId}-${targetPort}`,
+          source: sourceNodeId,
+          target: targetNodeId,
+          sourceHandle: `${sourceNodeId}-output-${sourcePort}`,
+          targetHandle: `${targetNodeId}-input-${targetPort}`,
+          type: "default",
+          animated: false,
         });
-        setNodes(newNodes);
-
-        const newEdges: Edge[] = [];
-
-        // Iterate through each link in the configuration
-        // and create edges based on the source and target nodes
-        // and their respective ports
-        Object.entries(configData.links).forEach(([target, source], index) => {
-          // Parse target and source strings (format: "nodeType+index:port")
-          const [targetNodeId, targetPort] = target.split(":");
-          const [sourceNodeId, sourcePort] = source.split(":");
-
-          newEdges.push({
-            id: `${sourceNodeId}-${sourcePort}-${targetNodeId}-${targetPort}`,
-            source: sourceNodeId,
-            target: targetNodeId,
-            sourceHandle: `${sourceNodeId}-output-${sourcePort}`,
-            targetHandle: `${targetNodeId}-input-${targetPort}`,
-            type: "default",
-            animated: false,
-          });
-        });
+      });
       setEdges(newEdges);
 
       setIsLoading(false);
