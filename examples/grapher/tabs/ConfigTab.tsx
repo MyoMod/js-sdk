@@ -1,12 +1,25 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Card } from "../components/Card";
 import {
   buttonStyle,
   disabledButtonStyle,
   inputStyle,
 } from "../utils/styleUtils";
-import { ConfigurationViewer } from "../components/ConfigurationViewer";
+import {
+  ConfigurationViewer,
+  ConfigurationData,
+} from "../components/ConfigurationViewer";
 import "@xyflow/react/dist/style.css";
+
+const defaultConfig: ConfigurationData = {
+  name: "Default Config",
+  color: 0,
+  deviceNodes: [],
+  embeddedDeviceNodes: [],
+  algorithmicNodes: [],
+  links: {},
+  positions: {},
+};
 
 interface ConfigTabProps {
   isLoading: boolean;
@@ -34,6 +47,19 @@ export function ConfigTab({
   handleGetAllConfigurationChunks,
 }: ConfigTabProps) {
   const [viewMode, setViewMode] = useState<"json" | "flow">("flow");
+  const [configData, setConfigData] = useState<ConfigurationData>();
+
+  // Update local configDataState when completeConfig has been read from device
+  useEffect(() => {
+    if (completeConfig) {
+      try {
+        const parsedConfig = JSON.parse(completeConfig);
+        setConfigData(parsedConfig[0]);
+      } catch (error) {
+        console.error("Error parsing complete configuration:", error);
+      }
+    }
+  }, [completeConfig]);
 
   return (
     <div>
@@ -55,33 +81,31 @@ export function ConfigTab({
               {isLoading ? "Loading..." : "Load Complete Configuration"}
             </button>
           </div>
-          {completeConfig && (
-            <div style={{ display: "flex", gap: "10px" }}>
-              <button
-                onClick={() => setViewMode("flow")}
-                style={{
-                  ...buttonStyle,
-                  backgroundColor: viewMode === "flow" ? "#4a90e2" : "#f0f0f0",
-                  color: viewMode === "flow" ? "white" : "#333",
-                }}
-              >
-                Flow View
-              </button>
-              <button
-                onClick={() => setViewMode("json")}
-                style={{
-                  ...buttonStyle,
-                  backgroundColor: viewMode === "json" ? "#4a90e2" : "#f0f0f0",
-                  color: viewMode === "json" ? "white" : "#333",
-                }}
-              >
-                JSON View
-              </button>
-            </div>
-          )}
+          <div style={{ display: "flex", gap: "10px" }}>
+            <button
+              onClick={() => setViewMode("flow")}
+              style={{
+                ...buttonStyle,
+                backgroundColor: viewMode === "flow" ? "#4a90e2" : "#f0f0f0",
+                color: viewMode === "flow" ? "white" : "#333",
+              }}
+            >
+              Flow View
+            </button>
+            <button
+              onClick={() => setViewMode("json")}
+              style={{
+                ...buttonStyle,
+                backgroundColor: viewMode === "json" ? "#4a90e2" : "#f0f0f0",
+                color: viewMode === "json" ? "white" : "#333",
+              }}
+            >
+              JSON View
+            </button>
+          </div>
         </div>
 
-        {completeConfig && viewMode === "json" && (
+        {viewMode === "json" && (
           <div
             style={{
               maxHeight: "500px",
@@ -95,12 +119,17 @@ export function ConfigTab({
               whiteSpace: "pre-wrap",
             }}
           >
-            {completeConfig}
+            {completeConfig || "No configuration data available."}
           </div>
         )}
 
-        {completeConfig && viewMode === "flow" && (
-          <ConfigurationViewer configData={JSON.parse(completeConfig)[0]} />
+        {configData && viewMode === "flow" && (
+          <ConfigurationViewer
+            configData={configData || defaultConfig}
+            onConfigChange={(config) =>
+              setConfigData(config as ConfigurationData)
+            }
+          />
         )}
       </Card>
 

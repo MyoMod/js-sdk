@@ -28,7 +28,7 @@ import ELK from "elkjs/lib/elk.bundled.js";
 import { temp } from "three/webgpu";
 
 // Define configuration data type
-interface ConfigurationData {
+export interface ConfigurationData {
   name: string;
   color: number;
   deviceNodes: any[];
