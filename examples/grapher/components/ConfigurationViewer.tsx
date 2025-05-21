@@ -37,11 +37,17 @@ interface ConfigurationData {
   links: {
     [key: string]: string;
   };
+  positions: {
+    [key: string]: {
+      x: number;
+      y: number;
+    };
+  };
 }
 
 interface ConfigurationViewerProps {
   configData: ConfigurationData | null;
-  onConfigChange?: (config: Partial<ConfigurationData>) => void; // New callback for config changes
+  onConfigChange?: (config: Partial<ConfigurationData>) => void;
 }
 
 // Define base node types
@@ -272,7 +278,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
     });
 
     return [newNodeTypes, newNodePortTypes];
-  }, []);
+  }, [handleNodeOptionChange]);
 
   // Toggle full screen mode
   const toggleFullScreen = useCallback(() => {
@@ -293,57 +299,91 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
     };
   }, [isFullScreen]);
 
-  // Generate edges from configuration data
-  const generateEdges = useCallback((config: ConfigurationData) => {
-    if (!config || !config.links) return [];
+  const isValidConnection = useCallback(
+    (connection: Edge | Connection) => {
+      // Check if the connection is valid based on the node types and ports
+      const sourceNode = nodes.find((node) => node.id === connection.source);
+      const targetNode = nodes.find((node) => node.id === connection.target);
 
-    const newEdges: Edge[] = [];
+      // Check if both nodes exist and have valid types
+      if (
+        !sourceNode?.type ||
+        !targetNode?.type ||
+        !nodePortTypes[sourceNode.type] ||
+        !nodePortTypes[targetNode.type]
+      ) {
+        return false;
+      }
 
-    // Iterate through each link in the configuration
-    // and create edges based on the source and target nodes
-    // and their respective ports
-    Object.entries(config.links).forEach(([target, source], index) => {
-      // Parse target and source strings (format: "nodeType+index:port")
-      const [targetNodeId, targetPort] = target.split(":");
-      const [sourceNodeId, sourcePort] = source.split(":");
+      const sourcePortTypes = nodePortTypes[sourceNode.type].outputs;
+      const targetPortTypes = nodePortTypes[targetNode.type].inputs;
 
-      newEdges.push({
-        id: `${sourceNodeId}-${sourcePort}-${targetNodeId}-${targetPort}`,
-        source: sourceNodeId,
-        target: targetNodeId,
-        sourceHandle: `${sourceNodeId}-output-${sourcePort}`,
-        targetHandle: `${targetNodeId}-input-${targetPort}`,
-        type: "default",
-        animated: false,
-      });
-    });
+      const sourcePortIndex = Number(connection.sourceHandle?.split("-").pop());
+      const targetPortIndex = Number(connection.targetHandle?.split("-").pop());
 
-    return newEdges;
-  }, []);
+      // Check if we have valid port indexes
+      if (isNaN(sourcePortIndex) || isNaN(targetPortIndex)) return false;
 
-  // Function to update the configuration when edges change
-  const updateConfigFromEdges = useCallback(
-    (newEdges: Edge[]) => {
+      // Check if one of the port types is dynamic
+      if (
+        sourcePortTypes[sourcePortIndex] === "dynamic" ||
+        targetPortTypes[targetPortIndex] === "dynamic"
+      ) {
+        return true; // Allow dynamic connections
+      }
+
+      // Check if the port types match
+      return (
+        sourcePortTypes[sourcePortIndex] === targetPortTypes[targetPortIndex]
+      );
+    },
+    [nodes, nodePortTypes]
+  );
+
+  // Handle new connections
+  const onConnect = useCallback(
+    (params: Edge | Connection) => {
       if (!configData || !onConfigChange) return;
 
-      // Create a new links object from the edges
-      const newLinks: { [key: string]: string } = {};
+      const sourceNode = params.source;
+      const sourcePortIndex = Number(params.sourceHandle?.split("-").pop());
+      const targetNode = params.target;
+      const targetPortIndex = Number(params.targetHandle?.split("-").pop());
+      const sourcePort = `${sourceNode}:${sourcePortIndex}`;
+      const targetPort = `${targetNode}:${targetPortIndex}`;
 
-      newEdges.forEach((edge) => {
-        if (edge.sourceHandle && edge.targetHandle) {
-          // Extract port indices from handles
-          const sourceNodeId = edge.source;
-          const targetNodeId = edge.target;
-          const sourcePort = edge.sourceHandle.split("-").pop();
-          const targetPort = edge.targetHandle.split("-").pop();
+      const newLinks = {
+        ...configData.links,
+        [targetPort]: sourcePort,
+      }
 
-          if (sourcePort && targetPort) {
-            // Format: "nodeType+index:port"
-            const targetKey = `${targetNodeId}:${targetPort}`;
-            const sourceValue = `${sourceNodeId}:${sourcePort}`;
-            newLinks[targetKey] = sourceValue;
-          }
-        }
+      // Send updated links to parent component
+      onConfigChange({
+        ...configData,
+        links: newLinks,
+      });
+    },
+    [configData, onConfigChange]
+  );
+
+  // Handle edge deletions
+  const onEdgesDelete = useCallback(
+    (edgesToDelete: Edge[]) => {
+      if (!configData || !onConfigChange) return;
+
+      const linksToRemove: { [key: string]: string } = {};
+      
+      edgesToDelete.forEach((edge) => {
+        const [ sourceNode, sourcePortIndex, targetNode, targetPortIndex] = edge.id.split("-");
+        const sourcePort = `${sourceNode}:${sourcePortIndex}`;
+        const targetPort = `${targetNode}:${targetPortIndex}`;
+        linksToRemove[targetPort] = sourcePort;
+      });
+      
+      // Create a new links object without the deleted edges
+      const newLinks = { ...configData.links };
+      Object.keys(linksToRemove).forEach((key) => {
+        delete newLinks[key];
       });
 
       // Send updated links to parent component
@@ -355,86 +395,27 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
     [configData, onConfigChange]
   );
 
-  const isValidConnection = (connection: Edge | Connection) => {
-    // Check if the connection is valid based on the node types and ports
-    const sourceNode = nodes.find((node) => node.id === connection.source);
-    const targetNode = nodes.find((node) => node.id === connection.target);
+  const onNodeMoved = useCallback(
+    (event: any, node: Node) => {
+      if (!configData || !onConfigChange) return;
 
-    // Check if both nodes exist and have valid types
-    if (
-      !sourceNode?.type ||
-      !targetNode?.type ||
-      !nodePortTypes[sourceNode.type] ||
-      !nodePortTypes[targetNode.type]
-    ) {
-      return false;
-    }
+      // Create a deep clone of the config data to avoid direct mutation
+      const updatedConfig = JSON.parse(JSON.stringify(configData));
 
-    const sourcePortTypes = nodePortTypes[sourceNode.type].outputs;
-    const targetPortTypes = nodePortTypes[targetNode.type].inputs;
+      // Update the position in the config data
+      if (updatedConfig.positions) {
+        updatedConfig.positions[node.id] = node.position;
+      }
 
-    const sourcePortIndex = Number(connection.sourceHandle?.split("-").pop());
-    const targetPortIndex = Number(connection.targetHandle?.split("-").pop());
-
-    // Check if we have valid port indexes
-    if (isNaN(sourcePortIndex) || isNaN(targetPortIndex)) return false;
-
-    // Check if one of the port types is dynamic
-    if (
-      sourcePortTypes[sourcePortIndex] === "dynamic" ||
-      targetPortTypes[targetPortIndex] === "dynamic"
-    ) {
-      return true; // Allow dynamic connections
-    }
-
-    // Check if the port types match
-    return (
-      sourcePortTypes[sourcePortIndex] === targetPortTypes[targetPortIndex]
-    );
-  };
-
-  // Handle new connections
-  const onConnect = useCallback(
-    (params: Edge | Connection) => {
-      // Create a new edge with the connection params
-      const newEdges = addEdge(
-        {
-          ...params,
-          type: "default",
-          animated: false,
-          id: `${params.source}-${params.sourceHandle}-${params.target}-${params.targetHandle}`,
-        },
-        edges
-      );
-
-      setEdges(newEdges);
-      updateConfigFromEdges(newEdges);
+      // Notify parent of the configuration change
+      onConfigChange(updatedConfig);
     },
-    [edges, setEdges, updateConfigFromEdges]
+    [configData, onConfigChange]
   );
-
-  // Handle edge deletions
-  const onEdgesDelete = useCallback(
-    (edgesToDelete: Edge[]) => {
-      // The edges have already been deleted from the state at this point
-      // Just need to update the configuration
-      updateConfigFromEdges(
-        edges.filter((edge) => !edgesToDelete.some((e) => e.id === edge.id))
-      );
-    },
-    [edges, updateConfigFromEdges]
-  );
-
-  // Handle edge updates
-  useEffect(() => {
-    // We don't want to update config during initial loading
-    if (!isLoading && edges.length > 0) {
-      updateConfigFromEdges(edges);
-    }
-  }, [edges, isLoading, updateConfigFromEdges]);
 
   // Function to apply automatic layout using ELK
   const applyLayout = useCallback(async () => {
+    if (!configData || !onConfigChange) return;
     if (nodes.length === 0) return;
 
     // Prevent multiple layout operations at the same time
@@ -497,30 +478,47 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
       // Calculate layout
       const newGraph = await elk.layout(elkGraph);
 
-      // Apply the layout to the nodes
+      // apply the layout to configData
       if (newGraph.children) {
-        const layoutedNodes = nodes.map((node) => {
-          const elkNode = newGraph.children?.find((n) => n.id === node.id);
-          if (elkNode && elkNode.x !== undefined && elkNode.y !== undefined) {
-            return {
-              ...node,
-              position: {
-                x: elkNode.x,
-                y: elkNode.y,
-              },
-            };
-          }
-          return node;
+        const layoutedNodes: {
+          id: string;
+          position: { x: number | undefined; y: number | undefined };
+        }[] = newGraph.children.map((node) => {
+          const nodeId: string = node.id;
+          const position = {
+            x: node.x,
+            y: node.y,
+          };
+          return {
+            id: nodeId,
+            position,
+          };
         });
 
-        setNodes(layoutedNodes);
+        // Update the positions in the configData
+        const updatedPositions = layoutedNodes.reduce((acc, node) => {
+          if (node.position.x !== undefined && node.position.y !== undefined) {
+            acc[node.id] = {
+              x: node.position.x,
+              y: node.position.y
+            };
+          }
+          return acc;
+        }, {} as { [key: string]: { x: number; y: number } });
+
+        onConfigChange({
+          ...configData,
+          positions: updatedPositions,
+        });
+
+
       }
     } catch (error) {
       console.error("Error applying layout:", error);
     } finally {
       setIsLayouting(false);
     }
-  }, [nodes, edges, setNodes, isLayouting]);
+  }, [nodes, edges, setNodes, isLayouting, configData, onConfigChange]);
 
   // Group node definitions by type
   const nodesByCategory = useMemo(() => {
@@ -548,182 +546,36 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
       );
       if (!nodeDef) return;
 
-      // Generate a temporary ID for the node based on its category
-      let tempId: string;
-      if (arrayName === "embeddedDeviceNodes") {
-        tempId = `e_`;
-      } else if (arrayName === "deviceNodes") {
-        tempId = `d_`;
-      } else {
-        tempId = `a_`;
-      }
-
       // Get default node data
       const defaultNodeData: any = nodeDef.example;
 
-      // If ID is defined, set it to "Test"
-      const nodeID = "New Node";
+      // If the node has a ID prompt the user for a name
+      if (defaultNodeData.ID) {
+        const nodeName = prompt("Enter a name for the new node:", "New Node");
+        if (nodeName) {
+          defaultNodeData.ID = nodeName;
+        }
+      }
 
-      const newReactFlowNode: Node = {
-        id: tempId,
-        type: nodeType,
-        position: {
-          x: 300,
-          y: 300,
-        },
-        data: {
-          type: nodeType,
-          configData: defaultNodeData,
-          id: tempId,
-          nodeID: arrayName !== "algorithmicNodes" ? nodeID : undefined,
-        },
+      // Add the node to the appropriate array
+      const newConfigData = {
+        ...configData,
+        [arrayName]: [
+          ...configData[arrayName],
+          {
+            ...defaultNodeData,
+          },
+        ],
       };
-
-      // Add the new node to the ReactFlow instance
-      setNodes((nds) => nds.concat(newReactFlowNode));
 
       // Close the menu
       setShowNodeMenu(false);
+
+      // Update the configuration data
+      onConfigChange(newConfigData);
     },
-    [configData, onConfigChange, setNodes]
+    [configData, onConfigChange]
   );
-
-  // Handle node ids
-  // Ids must be unique and there may be no missing ids (e.g., "e0", "e1", "e3" is invalid)
-  // New nodes are created with temporary IDs (e.g., "e_", "d_", "a_"), these need to be replaced with unique IDs
-  // On node deletion we need to check if there are any missing IDs
-  useEffect(() => {
-    // Skip if we're still loading or if there are no nodes
-    if (isLoading || nodes.length === 0) return;
-
-    let needsUpdate = false;
-    let idMap: Record<string, string> = {};
-
-    // Check if there are any temporary IDs that need fixing
-    const hasTemporaryIds = nodes.some((node) => node.id.includes("_"));
-
-    // Check for gaps in node ID sequences
-    const prefixGroups = {
-      e: nodes
-        .filter((n) => n.id[0] === "e" && !n.id.includes("_"))
-        .map((n) => parseInt(n.id.substring(1)))
-        .sort((a, b) => a - b),
-      d: nodes
-        .filter((n) => n.id[0] === "d" && !n.id.includes("_"))
-        .map((n) => parseInt(n.id.substring(1)))
-        .sort((a, b) => a - b),
-      a: nodes
-        .filter((n) => n.id[0] === "a" && !n.id.includes("_"))
-        .map((n) => parseInt(n.id.substring(1)))
-        .sort((a, b) => a - b),
-    };
-
-    // Check if there are gaps in the ID sequences
-    const hasGaps = Object.entries(prefixGroups).some(([prefix, ids]) => {
-      if (ids.length === 0) return false;
-
-      for (let i = 0; i < ids.length; i++) {
-        if (ids[i] !== i) return true;
-      }
-      return false;
-    });
-
-    // If we have temporary IDs or gaps, we need to update
-    needsUpdate = hasTemporaryIds || hasGaps;
-
-    if (!needsUpdate) return;
-
-    // Count existing nodes by prefix to determine next available IDs
-    const prefixCounts = {
-      e: 0,
-      d: 0,
-      a: 0,
-    };
-
-    // First pass: Assign new IDs and build ID mapping
-    const updatedNodes = nodes.map((node) => {
-      const prefix = node.id[0];
-
-      // Skip invalid prefixes
-      if (!["e", "d", "a"].includes(prefix)) {
-        return node;
-      }
-
-      // If the node has a temporary ID or we're fixing gaps
-      if (node.id.includes("_") || hasGaps) {
-        const newId = `${prefix}${prefixCounts[
-          prefix as keyof typeof prefixCounts
-        ]++}`;
-        idMap[node.id] = newId;
-
-        return {
-          ...node,
-          id: newId,
-          data: {
-            ...node.data,
-            id: newId,
-          },
-        };
-      } else {
-        // For nodes that don't need new IDs, still increment the counter
-        prefixCounts[prefix as keyof typeof prefixCounts]++;
-        return node;
-      }
-    });
-
-    // Update edges to use the new node IDs
-    const updatedEdges = edges.map((edge) => {
-      let newEdge = { ...edge };
-      let edgeChanged = false;
-
-      if (edge.source in idMap) {
-        newEdge.source = idMap[edge.source];
-        if (edge.sourceHandle) {
-          newEdge.sourceHandle = edge.sourceHandle.replace(
-            edge.source,
-            idMap[edge.source]
-          );
-        }
-        edgeChanged = true;
-      }
-
-      if (edge.target in idMap) {
-        newEdge.target = idMap[edge.target];
-        if (edge.targetHandle) {
-          newEdge.targetHandle = edge.targetHandle.replace(
-            edge.target,
-            idMap[edge.target]
-          );
-        }
-        edgeChanged = true;
-      }
-
-      // Update edge ID if source or target changed
-      if (edgeChanged) {
-        newEdge.id = `${newEdge.source}-${newEdge.sourceHandle
-          ?.split("-")
-          .pop()}-${newEdge.target}-${newEdge.targetHandle?.split("-").pop()}`;
-      }
-
-      return newEdge;
-    });
-
-    // Update nodes and edges with corrected IDs
-    setNodes(updatedNodes);
-    if (
-      updatedEdges.some(
-        (e) =>
-          !edges.find(
-            (orig) =>
-              orig.id === e.id &&
-              orig.source === e.source &&
-              orig.target === e.target
-          )
-      )
-    ) {
-      setEdges(updatedEdges);
-    }
-  }, [nodes, edges, setNodes, setEdges, isLoading]);
 
   // Initialize node types once
   useEffect(() => {
@@ -734,6 +586,14 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
 
   // Process config data when it changes
   useEffect(() => {
+    // If configData is null, reset nodes and edges
+    if (!configData) {
+      setNodes([]);
+      setEdges([]);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
 
     // If we have config data, parse it and create edges
@@ -762,13 +622,17 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
           const nodeType = node.nodeData.type;
           const nodeId = node.id;
 
+
+          const position = (configData.positions && configData.positions[nodeId]) || {
+            x: 200 + (index % 3) * 300,
+            y: 100 + Math.floor(index / 3) * 200,
+            };
+
+
           return {
             id: nodeId,
             type: nodeType,
-            position: {
-              x: 200 + (index % 3) * 300,
-              y: 100 + Math.floor(index / 3) * 200,
-            },
+            position: position,
             data: {
               type: nodeType,
               configData: node.nodeData,
@@ -779,7 +643,26 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
         });
         setNodes(newNodes);
 
-        const newEdges = generateEdges(configData);
+        const newEdges: Edge[] = [];
+
+        // Iterate through each link in the configuration
+        // and create edges based on the source and target nodes
+        // and their respective ports
+        Object.entries(configData.links).forEach(([target, source], index) => {
+          // Parse target and source strings (format: "nodeType+index:port")
+          const [targetNodeId, targetPort] = target.split(":");
+          const [sourceNodeId, sourcePort] = source.split(":");
+
+          newEdges.push({
+            id: `${sourceNodeId}-${sourcePort}-${targetNodeId}-${targetPort}`,
+            source: sourceNodeId,
+            target: targetNodeId,
+            sourceHandle: `${sourceNodeId}-output-${sourcePort}`,
+            targetHandle: `${targetNodeId}-input-${targetPort}`,
+            type: "default",
+            animated: false,
+          });
+        });
         setEdges(newEdges);
 
         setIsLoading(false);
@@ -791,7 +674,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
       setEdges([]);
       setIsLoading(false); // Set loading to false if there's no config data
     }
-  }, [configData, generateEdges, setNodes, setEdges]);
+  }, [configData, setNodes, setEdges]);
 
   // Add a dedicated useEffect to make sure spinner is correctly displayed
   useEffect(() => {
@@ -877,6 +760,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
           onConnect={onConnect}
           onReconnect={onConnect}
           onEdgesDelete={onEdgesDelete}
+          onNodeDragStop={onNodeMoved}
           onNodesDelete={() => {}}
           nodeTypes={nodeTypes}
           fitView

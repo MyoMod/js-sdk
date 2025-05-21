@@ -5,7 +5,7 @@ import exampleConfigData from "../configurationManager/exampleConfig.json";
 export const TestConfigViewer: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [newConfigData, setConfigData] = useState(exampleConfigData[0]);
-  const [originalConfig] = useState(
+  const [originalConfig, setOriginalConfig] = useState(
     JSON.parse(JSON.stringify(exampleConfigData[0]))
   ); // Deep copy for reference
 
@@ -13,6 +13,7 @@ export const TestConfigViewer: React.FC = () => {
   const handleConfigChange = (updatedConfig: any) => {
     console.log("Configuration changed:", updatedConfig);
     setConfigData(updatedConfig);
+    setOriginalConfig(updatedConfig);
   };
 
   // Memoize the ConfigurationViewer to prevent unnecessary re-renders
