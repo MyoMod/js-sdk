@@ -1,15 +1,61 @@
-export async function loadMyoMod(): Promise<MyoMod> {
-  const device = await navigator.bluetooth.requestDevice({
-    filters: [
-      {
-        namePrefix: "MyoMod",
-      },
-    ],
-    optionalServices: ["f1f1d764-f9dc-4274-9f59-325fea6d631b"],
-  });
-  if (device.gatt == null) {
-    throw new Error(``);
+export async function loadMyoMod(
+  autoConnect: boolean = false
+): Promise<MyoMod | null> {
+  if (!navigator.bluetooth) {
+    throw new Error("Bluetooth not supported");
   }
+
+  let device;
+  try {
+    if (autoConnect) {
+      // Try to get available devices using getAvailableDevices API (if available)
+      if ("getDevices" in navigator.bluetooth) {
+        const devices = await navigator.bluetooth.getDevices();
+        const myoModDevices = devices.filter((d) =>
+          d.name?.startsWith("MyoMod")
+        );
+
+        // If exactly one MyoMod device is available, connect to it automatically
+        if (myoModDevices.length === 1) {
+          device = myoModDevices[0];
+          console.log("Auto-connecting to device:", device.name);
+        } else if (myoModDevices.length > 1) {
+          console.log(
+            "Multiple MyoMod devices found, falling back to manual selection"
+          );
+        } else {
+          console.log(
+            "No MyoMod devices found, falling back to manual selection"
+          );
+        }
+      } else {
+        console.log(
+          "getAvailableDevices not supported, falling back to manual selection"
+        );
+      }
+    }
+
+    // If autoConnect is false or no device was found automatically, use the requestDevice method
+    if (!device) {
+      device = await navigator.bluetooth.requestDevice({
+        filters: [
+          {
+            namePrefix: "MyoMod",
+          },
+        ],
+        optionalServices: ["f1f1d764-f9dc-4274-9f59-325fea6d631b"],
+      });
+    }
+  } catch (err) {
+    console.error("Error requesting Bluetooth device:", err);
+    return null;
+  }
+
+  if (!device.gatt) {
+    console.error("Bluetooth device does not support GATT");
+    throw new Error("Device does not support GATT");
+  }
+
   await device.gatt.connect();
   const service = await device.gatt.getPrimaryService(
     "f1f1d764-f9dc-4274-9f59-325fea6d631b"
@@ -390,7 +436,15 @@ export class DPUControlProtocol {
 
 export class MyoMod {
   private poseHelper: Partial<MyoModHandPose> = {};
-  private oldCounter: number = -1;
+  private oldCounters: {
+    pose: number;
+    rawEmg: number;
+    filteredEmg: number;
+  } = {
+    pose: -1,
+    rawEmg: -1,
+    filteredEmg: -1,
+  };
   private _dpuControl: DPUControlProtocol | null = null;
 
   constructor(
@@ -408,9 +462,46 @@ export class MyoMod {
     return this._dpuControl;
   }
 
+  checkCounter(counter: number, oldCounter: number, name: string): void {
+    if (counter != (oldCounter + 1) % 256 && oldCounter != -1) {
+      console.warn(
+        `MyoMod: ${name} counter mismatch! Expected ${
+          (oldCounter + 1) % 256
+        } but got ${counter}`
+      );
+    }
+  }
+
+  async subscribeCharacteristic(
+    characteristic: BluetoothRemoteGATTCharacteristic,
+    callback: (e: Event) => void,
+    name: string
+  ): Promise<() => void> {
+    characteristic.addEventListener("characteristicvaluechanged", callback);
+
+    return characteristic
+      .startNotifications()
+      .then(() => {
+        return () => {
+          console.log(`MyoMod: Stopping notifications for ${name}...`);
+          characteristic.stopNotifications().then(() => {
+            console.log(`MyoMod: Stopped notifications for ${name}`);
+            characteristic.removeEventListener(
+              "characteristicvaluechanged",
+              callback
+            );
+          });
+        };
+      })
+      .catch((error) => {
+        console.error("Error starting notifications for Hand Pose:", error);
+        throw error;
+      });
+  }
+
   subscribeHandPose(
     callback: (data: Readonly<MyoModHandPose>, raw: DataView) => void
-  ): () => void {
+  ): Promise<() => void> {
     const listener = (e: Event) => {
       const { value } = e.target as unknown as { value: DataView };
       this.poseHelper.thumbFlex = value.getUint8(0) / 255;
@@ -421,34 +512,22 @@ export class MyoMod {
       this.poseHelper.pinkyFlex = value.getUint8(5) / 255;
       this.poseHelper.wristFlex = value.getUint8(6) / 255;
       this.poseHelper.wristRotation = value.getUint8(7) / 255;
-      let valueCounter = value.getUint8(8);
+      const valueCounter = value.getUint8(8);
       this.poseHelper.counter = valueCounter / 255;
-      if (
-        valueCounter != (this.oldCounter + 1) % 256 &&
-        this.oldCounter != -1
-      ) {
-        console.warn(
-          `MyoMod: Counter mismatch! Expected ${
-            this.oldCounter + 1
-          } but got ${valueCounter}`
-        );
+
+      // Check if the counter is correct
+      if (this.oldCounters.pose != -1) {
+        this.checkCounter(valueCounter, this.oldCounters.pose, "Hand Pose");
       }
-      this.oldCounter = valueCounter;
+      this.oldCounters.pose = valueCounter;
 
       callback(this.poseHelper as Readonly<MyoModHandPose>, value);
     };
-    this.handPoseCharacteristic.addEventListener(
-      "characteristicvaluechanged",
-      listener
+    return this.subscribeCharacteristic(
+      this.handPoseCharacteristic,
+      listener,
+      "Hand Pose"
     );
-    this.handPoseCharacteristic.startNotifications();
-    return () => {
-      this.handPoseCharacteristic.stopNotifications();
-      this.handPoseCharacteristic.removeEventListener(
-        "characteristicvaluechanged",
-        listener
-      );
-    };
   }
 
   subscribeEmgData(
@@ -457,7 +536,7 @@ export class MyoMod {
       counter: number,
       raw: DataView
     ) => void
-  ): () => void {
+  ): Promise<() => void> {
     const emgHelper: MyoModEmgData = {
       chnA: new Float32Array(15),
       chnB: new Float32Array(15),
@@ -496,21 +575,20 @@ export class MyoMod {
         }
       }
 
+      // Check if the counter is correct
+      if (this.oldCounters.rawEmg != -1) {
+        this.checkCounter(counter, this.oldCounters.rawEmg, "Raw EMG");
+      }
+      this.oldCounters.rawEmg = counter;
+
       callback(emgHelper as Readonly<MyoModEmgData>, counter, value);
     };
 
-    this.emgDataCharacteristic.addEventListener(
-      "characteristicvaluechanged",
-      listener
+    return this.subscribeCharacteristic(
+      this.emgDataCharacteristic,
+      listener,
+      "Raw EMG"
     );
-    this.emgDataCharacteristic.startNotifications();
-    return () => {
-      this.emgDataCharacteristic.stopNotifications();
-      this.emgDataCharacteristic.removeEventListener(
-        "characteristicvaluechanged",
-        listener
-      );
-    };
   }
 
   subscribeFilteredEmgData(
@@ -519,7 +597,7 @@ export class MyoMod {
       counter: number,
       raw: DataView
     ) => void
-  ): () => void {
+  ): Promise<() => void> {
     const emgHelper: MyoModFilteredEmgData = {
       data: new Float32Array(6),
       state: 0,
@@ -538,21 +616,24 @@ export class MyoMod {
       }
       emgHelper.state = value.getFloat32(4 * 6, true);
 
+      // Check if the counter is correct
+      if (this.oldCounters.filteredEmg != -1) {
+        this.checkCounter(
+          counter,
+          this.oldCounters.filteredEmg,
+          "Filtered EMG"
+        );
+      }
+      this.oldCounters.filteredEmg = counter;
+
       callback(emgHelper as Readonly<MyoModFilteredEmgData>, counter, value);
     };
 
-    this.filteredEmgCharacteristic.addEventListener(
-      "characteristicvaluechanged",
-      listener
+    return this.subscribeCharacteristic(
+      this.filteredEmgCharacteristic,
+      listener,
+      "Filtered EMG"
     );
-    this.filteredEmgCharacteristic.startNotifications();
-    return () => {
-      this.filteredEmgCharacteristic.stopNotifications();
-      this.filteredEmgCharacteristic.removeEventListener(
-        "characteristicvaluechanged",
-        listener
-      );
-    };
   }
 
   destroy(): void {
