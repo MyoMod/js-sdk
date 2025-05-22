@@ -1,17 +1,63 @@
 import { call } from "three/webgpu";
 
-export async function loadMyoMod(): Promise<MyoMod> {
-  const device = await navigator.bluetooth.requestDevice({
-    filters: [
-      {
-        namePrefix: "MyoMod",
-      },
-    ],
-    optionalServices: ["f1f1d764-f9dc-4274-9f59-325fea6d631b"],
-  });
-  if (device.gatt == null) {
-    throw new Error(``);
+export async function loadMyoMod(
+  autoConnect: boolean = false
+): Promise<MyoMod | null> {
+  if (!navigator.bluetooth) {
+    throw new Error("Bluetooth not supported");
   }
+
+  let device;
+  try {
+    if (autoConnect) {
+      // Try to get available devices using getAvailableDevices API (if available)
+      if ("getDevices" in navigator.bluetooth) {
+        const devices = await navigator.bluetooth.getDevices();
+        const myoModDevices = devices.filter((d) =>
+          d.name?.startsWith("MyoMod")
+        );
+
+        // If exactly one MyoMod device is available, connect to it automatically
+        if (myoModDevices.length === 1) {
+          device = myoModDevices[0];
+          console.log("Auto-connecting to device:", device.name);
+        } else if (myoModDevices.length > 1) {
+          console.log(
+            "Multiple MyoMod devices found, falling back to manual selection"
+          );
+        } else {
+          console.log(
+            "No MyoMod devices found, falling back to manual selection"
+          );
+        }
+      } else {
+        console.log(
+          "getAvailableDevices not supported, falling back to manual selection"
+        );
+      }
+    }
+
+    // If autoConnect is false or no device was found automatically, use the requestDevice method
+    if (!device) {
+      device = await navigator.bluetooth.requestDevice({
+        filters: [
+          {
+            namePrefix: "MyoMod",
+          },
+        ],
+        optionalServices: ["f1f1d764-f9dc-4274-9f59-325fea6d631b"],
+      });
+    }
+  } catch (err) {
+    console.error("Error requesting Bluetooth device:", err);
+    return null;
+  }
+
+  if (!device.gatt) {
+    console.error("Bluetooth device does not support GATT");
+    throw new Error("Device does not support GATT");
+  }
+
   await device.gatt.connect();
   const service = await device.gatt.getPrimaryService(
     "f1f1d764-f9dc-4274-9f59-325fea6d631b"

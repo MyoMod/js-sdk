@@ -46,7 +46,11 @@ function Connecting() {
 const loadMyoModSymbol = Symbol("loadMyoMod");
 
 function Connected() {
-  const myoMod = suspend(() => loadMyoMod(), [loadMyoModSymbol]);
+  const myoMod = suspend(() => loadMyoMod(true), [loadMyoModSymbol]);
+  if (myoMod === null) {
+    return <div className="fullscreen-container">Failed to load MyoMod</div>;
+  }
+
   const [dataStreams, setDataStreams] = useState<DataStreamControls>({
     subscribeToHandPose: false,
     subscribeToRawEmg: true,
