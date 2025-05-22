@@ -14,14 +14,25 @@ export async function loadMyoMod(): Promise<MyoMod> {
   const service = await device.gatt.getPrimaryService(
     "f1f1d764-f9dc-4274-9f59-325fea6d631b"
   );
-  const [handPoseCharacteristic, emgDataCharacteristic, filteredEmgCharacteristic, asyncCtrlCharacteristic] = await Promise.all([
+  const [
+    handPoseCharacteristic,
+    emgDataCharacteristic,
+    filteredEmgCharacteristic,
+    asyncCtrlCharacteristic,
+  ] = await Promise.all([
     service.getCharacteristic("5782a59c-fca9-4213-909f-0f88517c8fae"),
     service.getCharacteristic("9c54ed76-847e-4d51-84be-7cf02794de53"),
     service.getCharacteristic("36845417-f01b-4167-afa1-81b322238fe1"),
     service.getCharacteristic("5f2d5b5b-2166-4d71-9b4a-ea719ce9777e"),
   ]);
 
-  return new MyoMod(device, handPoseCharacteristic, emgDataCharacteristic, filteredEmgCharacteristic, asyncCtrlCharacteristic);
+  return new MyoMod(
+    device,
+    handPoseCharacteristic,
+    emgDataCharacteristic,
+    filteredEmgCharacteristic,
+    asyncCtrlCharacteristic
+  );
 }
 
 export type MyoModHandPose = {
@@ -62,20 +73,19 @@ function crc32(str: string): string {
     }
   }
 
-  return (crc >>> 0).toString(16).padStart(8, '0');
+  return (crc >>> 0).toString(16).padStart(8, "0");
 }
 
-
-  // Function to decode base64 JSON data
-  const decodeBase64Json = (base64String: string): string | null => {
-    try {
-      // Decode base64 to string
-      return atob(base64String);
-    } catch (err) {
-      console.error("Failed to decode base64 JSON:", err);
-      return null;
-    }
-  };
+// Function to decode base64 JSON data
+const decodeBase64Json = (base64String: string): string | null => {
+  try {
+    // Decode base64 to string
+    return atob(base64String);
+  } catch (err) {
+    console.error("Failed to decode base64 JSON:", err);
+    return null;
+  }
+};
 
 // DPU Control Protocol response status codes
 export enum DPUControlStatus {
@@ -88,7 +98,7 @@ export enum DPUControlStatus {
 // DPU Control Protocol implementation
 export class DPUControlProtocol {
   private readonly encoder = new TextEncoder();
-  private readonly decoder = new TextDecoder('utf-8');
+  private readonly decoder = new TextDecoder("utf-8");
   private responsePromise: Promise<string> | null = null;
   private resolveResponse: ((value: string) => void) | null = null;
   private rejectResponse: ((reason: any) => void) | null = null;
@@ -101,7 +111,10 @@ export class DPUControlProtocol {
 
   private async setupNotifications(): Promise<void> {
     await this.characteristic.startNotifications();
-    this.characteristic.addEventListener('characteristicvaluechanged', this.handleResponse.bind(this));
+    this.characteristic.addEventListener(
+      "characteristicvaluechanged",
+      this.handleResponse.bind(this)
+    );
   }
 
   private handleResponse(event: Event): void {
@@ -117,7 +130,7 @@ export class DPUControlProtocol {
 
   private async sendCommand(command: string): Promise<string> {
     if (this.responsePromise) {
-      throw new Error('A command is already in progress');
+      throw new Error("A command is already in progress");
     }
 
     this.responsePromise = new Promise<string>((resolve, reject) => {
@@ -126,7 +139,7 @@ export class DPUControlProtocol {
 
       setTimeout(() => {
         if (this.rejectResponse) {
-          this.rejectResponse(new Error('Command timed out'));
+          this.rejectResponse(new Error("Command timed out"));
           this.resolveResponse = null;
           this.rejectResponse = null;
           this.responsePromise = null;
@@ -142,20 +155,23 @@ export class DPUControlProtocol {
     return response;
   }
 
-  private async executeCommand(commandPrefix: string, data: string = ''): Promise<[number, string]> {
+  private async executeCommand(
+    commandPrefix: string,
+    data: string = ""
+  ): Promise<[number, string]> {
     // Create command with placeholder checksum (no validation)
-    const commandWithoutCrc = `${commandPrefix}${data ? ' ' + data : ''}`;
+    const commandWithoutCrc = `${commandPrefix}${data ? " " + data : ""}`;
     const fullCommand = `${commandWithoutCrc}`;
 
-    console.log(
-      `"${fullCommand}"`
-    );
+    console.log(`"${fullCommand}"`);
 
     const response = await this.sendCommand(fullCommand);
 
     console.log(`-> "${response}"`);
 
-    const responseRegex = new RegExp(`^\\${commandPrefix} ([0-9a-f]{2}) ?([^\\s].*?)?$`);
+    const responseRegex = new RegExp(
+      `^\\${commandPrefix} ([0-9a-f]{2}) ?([^\\s].*?)?$`
+    );
     const match = response.match(responseRegex);
 
     console.log(match);
@@ -165,13 +181,13 @@ export class DPUControlProtocol {
     }
 
     const statusCode = parseInt(match[1], 16);
-    const responseData = match[2] || '';
+    const responseData = match[2] || "";
 
     return [statusCode, responseData];
   }
 
   async getVersion(): Promise<string> {
-    const [status, data] = await this.executeCommand('$v');
+    const [status, data] = await this.executeCommand("$v");
     if (status !== DPUControlStatus.SUCCESS) {
       throw new Error(`Get version failed with status: ${status.toString(16)}`);
     }
@@ -179,151 +195,196 @@ export class DPUControlProtocol {
   }
 
   async getRealTimeMode(): Promise<number> {
-    const [status, data] = await this.executeCommand('$m');
+    const [status, data] = await this.executeCommand("$m");
     if (status !== DPUControlStatus.SUCCESS) {
-      throw new Error(`Get real-time mode failed with status: ${status.toString(16)}`);
+      throw new Error(
+        `Get real-time mode failed with status: ${status.toString(16)}`
+      );
     }
     return parseInt(data);
   }
 
   async setRealTimeMode(mode: 0 | 1): Promise<void> {
-    const [status] = await this.executeCommand('$M', mode.toString());
+    const [status] = await this.executeCommand("$M", mode.toString());
     if (status !== DPUControlStatus.SUCCESS) {
       if (status === 0x10) {
-        throw new Error('Invalid mode');
+        throw new Error("Invalid mode");
       }
-      throw new Error(`Set real-time mode failed with status: ${status.toString(16)}`);
+      throw new Error(
+        `Set real-time mode failed with status: ${status.toString(16)}`
+      );
     }
   }
 
   async getActiveConfigIndex(): Promise<number> {
-    const [status, data] = await this.executeCommand('$i');
+    const [status, data] = await this.executeCommand("$i");
     if (status !== DPUControlStatus.SUCCESS) {
-      throw new Error(`Get active config index failed with status: ${status.toString(16)}`);
+      throw new Error(
+        `Get active config index failed with status: ${status.toString(16)}`
+      );
     }
     return parseInt(data);
   }
 
   async setActiveConfigIndex(index: number): Promise<void> {
-    const [status] = await this.executeCommand('$I', index.toString());
+    const [status] = await this.executeCommand("$I", index.toString());
     if (status !== DPUControlStatus.SUCCESS) {
       if (status === 0x10) {
-        throw new Error('Configuration not available or required devices not connected');
+        throw new Error(
+          "Configuration not available or required devices not connected"
+        );
       }
-      throw new Error(`Set active config index failed with status: ${status.toString(16)}`);
+      throw new Error(
+        `Set active config index failed with status: ${status.toString(16)}`
+      );
     }
   }
 
-  async getConfigurationsChunk(chunkIndex: number): Promise<{chunksCount: number, jsonData: string}> {
-    const [status, data] = await this.executeCommand('$c', chunkIndex.toString());
+  async getConfigurationsChunk(
+    chunkIndex: number
+  ): Promise<{ chunksCount: number; jsonData: string }> {
+    const [status, data] = await this.executeCommand(
+      "$c",
+      chunkIndex.toString()
+    );
     if (status !== DPUControlStatus.SUCCESS) {
       if (status === 0x10) {
-        throw new Error('ChunkIndex not parseable');
+        throw new Error("ChunkIndex not parseable");
       } else if (status === 0x11) {
-        throw new Error('ChunkIndex out of range');
+        throw new Error("ChunkIndex out of range");
       }
-      throw new Error(`Get configurations chunk failed with status: ${status.toString(16)}`);
+      throw new Error(
+        `Get configurations chunk failed with status: ${status.toString(16)}`
+      );
     }
 
-    const parts = data.split(' ');
+    const parts = data.split(" ");
     const base64Json = parts[1];
     const jsonChunkString = decodeBase64Json(base64Json);
     if (jsonChunkString === null) {
-      throw new Error('Failed to decode base64 JSON data');
+      throw new Error("Failed to decode base64 JSON data");
     }
     return {
       chunksCount: parseInt(parts[0]),
-      jsonData: jsonChunkString || ''
+      jsonData: jsonChunkString || "",
     };
   }
 
-  async setConfigurationsChunk(chunkIndex: number, jsonData: string): Promise<void> {
-    const [status] = await this.executeCommand('$C', `${chunkIndex} ${jsonData}`);
+  async setConfigurationsChunk(
+    chunkIndex: number,
+    jsonData: string
+  ): Promise<void> {
+    const [status] = await this.executeCommand(
+      "$C",
+      `${chunkIndex} ${jsonData}`
+    );
     if (status !== DPUControlStatus.SUCCESS) {
       if (status === 0x10) {
-        throw new Error('ChunkIndex not parseable');
+        throw new Error("ChunkIndex not parseable");
       } else if (status === 0x11) {
-        throw new Error('ChunkIndex out of range');
+        throw new Error("ChunkIndex out of range");
       } else if (status === 0x12) {
-        throw new Error('Chunk not cleared beforehand');
+        throw new Error("Chunk not cleared beforehand");
       } else if (status === 0x13) {
-        throw new Error('Flash access error');
+        throw new Error("Flash access error");
       }
-      throw new Error(`Set configurations chunk failed with status: ${status.toString(16)}`);
+      throw new Error(
+        `Set configurations chunk failed with status: ${status.toString(16)}`
+      );
     }
   }
 
   async reloadConfigurations(): Promise<void> {
-    const [status] = await this.executeCommand('$R');
+    const [status] = await this.executeCommand("$R");
     if (status !== DPUControlStatus.SUCCESS) {
       if (status === 0x10) {
-        throw new Error('Configuration file is invalid');
+        throw new Error("Configuration file is invalid");
       }
-      throw new Error(`Reload configurations failed with status: ${status.toString(16)}`);
+      throw new Error(
+        `Reload configurations failed with status: ${status.toString(16)}`
+      );
     }
   }
 
   async getConfigurationsChecksum(): Promise<string> {
-    const [status, data] = await this.executeCommand('$cc');
+    const [status, data] = await this.executeCommand("$cc");
     if (status !== DPUControlStatus.SUCCESS) {
-      throw new Error(`Get configurations checksum failed with status: ${status.toString(16)}`);
+      throw new Error(
+        `Get configurations checksum failed with status: ${status.toString(16)}`
+      );
     }
     return data;
   }
 
   async getFirmwareChecksum(): Promise<string> {
-    const [status, data] = await this.executeCommand('$fc');
+    const [status, data] = await this.executeCommand("$fc");
     if (status !== DPUControlStatus.SUCCESS) {
-      throw new Error(`Get firmware checksum failed with status: ${status.toString(16)}`);
+      throw new Error(
+        `Get firmware checksum failed with status: ${status.toString(16)}`
+      );
     }
     return data;
   }
 
-  async getBatteryState(): Promise<{capacity: number, charging: boolean}> {
-    const [status, data] = await this.executeCommand('$b');
+  async getBatteryState(): Promise<{ capacity: number; charging: boolean }> {
+    const [status, data] = await this.executeCommand("$b");
     if (status !== DPUControlStatus.SUCCESS) {
-      throw new Error(`Get battery state failed with status: ${status.toString(16)}`);
+      throw new Error(
+        `Get battery state failed with status: ${status.toString(16)}`
+      );
     }
 
-    const [capacityStr, chargingStr] = data.split(' ');
+    const [capacityStr, chargingStr] = data.split(" ");
     return {
       capacity: parseInt(capacityStr),
-      charging: chargingStr === '1'
+      charging: chargingStr === "1",
     };
   }
 
   async getFirmwareVersion(): Promise<string> {
-    const [status, data] = await this.executeCommand('$fv');
+    const [status, data] = await this.executeCommand("$fv");
     if (status !== DPUControlStatus.SUCCESS) {
-      throw new Error(`Get firmware version failed with status: ${status.toString(16)}`);
+      throw new Error(
+        `Get firmware version failed with status: ${status.toString(16)}`
+      );
     }
     return data;
   }
 
-  async listConnectedDevices(deviceIndex: number): Promise<{devicesCount: number, jsonData: string, devicesHash: string}> {
-    const [status, data] = await this.executeCommand('$d', deviceIndex.toString());
+  async listConnectedDevices(
+    deviceIndex: number
+  ): Promise<{ devicesCount: number; jsonData: string; devicesHash: string }> {
+    const [status, data] = await this.executeCommand(
+      "$d",
+      deviceIndex.toString()
+    );
     if (status !== DPUControlStatus.SUCCESS) {
       if (status === 0x10) {
-        throw new Error('DeviceIndex not parseable');
+        throw new Error("DeviceIndex not parseable");
       } else if (status === 0x11) {
-        throw new Error('DeviceIndex out of range');
+        throw new Error("DeviceIndex out of range");
       }
-      throw new Error(`List connected devices failed with status: ${status.toString(16)}`);
+      throw new Error(
+        `List connected devices failed with status: ${status.toString(16)}`
+      );
     }
 
-    const parts = data.split(' ');
+    const parts = data.split(" ");
     const devicesDescription = decodeBase64Json(parts[2]);
 
     return {
       devicesCount: parseInt(parts[0]),
-      jsonData: devicesDescription || '',
-      devicesHash: parts[1]
+      jsonData: devicesDescription || "",
+      devicesHash: parts[1],
     };
   }
 
   async destroy(): Promise<void> {
     await this.characteristic.stopNotifications();
-    this.characteristic.removeEventListener('characteristicvaluechanged', this.handleResponse.bind(this));
+    this.characteristic.removeEventListener(
+      "characteristicvaluechanged",
+      this.handleResponse.bind(this)
+    );
   }
 }
 
@@ -347,7 +408,9 @@ export class MyoMod {
     return this._dpuControl;
   }
 
-  subscribeHandPose(callback: (data: Readonly<MyoModHandPose>, raw: DataView) => void): () => void {
+  subscribeHandPose(
+    callback: (data: Readonly<MyoModHandPose>, raw: DataView) => void
+  ): () => void {
     const listener = (e: Event) => {
       const { value } = e.target as unknown as { value: DataView };
       this.poseHelper.thumbFlex = value.getUint8(0) / 255;
@@ -360,9 +423,14 @@ export class MyoMod {
       this.poseHelper.wristRotation = value.getUint8(7) / 255;
       let valueCounter = value.getUint8(8);
       this.poseHelper.counter = valueCounter / 255;
-      if (valueCounter != (this.oldCounter + 1) % 256 && this.oldCounter != -1) {
+      if (
+        valueCounter != (this.oldCounter + 1) % 256 &&
+        this.oldCounter != -1
+      ) {
         console.warn(
-          `MyoMod: Counter mismatch! Expected ${this.oldCounter + 1} but got ${valueCounter}`
+          `MyoMod: Counter mismatch! Expected ${
+            this.oldCounter + 1
+          } but got ${valueCounter}`
         );
       }
       this.oldCounter = valueCounter;
@@ -383,7 +451,13 @@ export class MyoMod {
     };
   }
 
-  subscribeEmgData(callback: (data: Readonly<MyoModEmgData>, counter: number, raw: DataView) => void): () => void {
+  subscribeEmgData(
+    callback: (
+      data: Readonly<MyoModEmgData>,
+      counter: number,
+      raw: DataView
+    ) => void
+  ): () => void {
     const emgHelper: MyoModEmgData = {
       chnA: new Float32Array(15),
       chnB: new Float32Array(15),
@@ -392,23 +466,30 @@ export class MyoMod {
       chnE: new Float32Array(15),
       chnF: new Float32Array(15),
     };
-    
+
     const listener = (e: Event) => {
       const { value } = e.target as unknown as { value: DataView };
 
-// The last byte is a one-byte counter
+      // The last byte is a one-byte counter
       const counter = value.getUint8(value.byteLength - 1);
 
       const dataSize = 15;
       const numChannels = 6;
-      
+
       for (let ch = 0; ch < numChannels; ch++) {
-        const channelArray = ch === 0 ? emgHelper.chnA :
-                            ch === 1 ? emgHelper.chnB :
-                            ch === 2 ? emgHelper.chnC :
-                            ch === 3 ? emgHelper.chnD :
-                            ch === 4 ? emgHelper.chnE : emgHelper.chnF;
-                            
+        const channelArray =
+          ch === 0
+            ? emgHelper.chnA
+            : ch === 1
+            ? emgHelper.chnB
+            : ch === 2
+            ? emgHelper.chnC
+            : ch === 3
+            ? emgHelper.chnD
+            : ch === 4
+            ? emgHelper.chnE
+            : emgHelper.chnF;
+
         for (let i = 0; i < dataSize; i++) {
           const byteOffset = (ch * dataSize + i) * 4;
           channelArray[i] = value.getFloat32(byteOffset, true);
@@ -417,7 +498,7 @@ export class MyoMod {
 
       callback(emgHelper as Readonly<MyoModEmgData>, counter, value);
     };
-    
+
     this.emgDataCharacteristic.addEventListener(
       "characteristicvaluechanged",
       listener
@@ -432,29 +513,34 @@ export class MyoMod {
     };
   }
 
-  subscribeFilteredEmgData(callback: (data: Readonly<MyoModFilteredEmgData>, counter: number, raw: DataView) => void): () => void {
+  subscribeFilteredEmgData(
+    callback: (
+      data: Readonly<MyoModFilteredEmgData>,
+      counter: number,
+      raw: DataView
+    ) => void
+  ): () => void {
     const emgHelper: MyoModFilteredEmgData = {
       data: new Float32Array(6),
       state: 0,
     };
-    
+
     const listener = (e: Event) => {
       const { value } = e.target as unknown as { value: DataView };
 
       const counter = value.getUint8(value.byteLength - 1);
 
       const numChannels = 6;
-                            
+
       for (let i = 0; i < numChannels; i++) {
         const byteOffset = i * 4;
         emgHelper.data[i] = value.getFloat32(byteOffset, true);
       }
-      emgHelper.state = value.getFloat32(4*6, true);
-      
+      emgHelper.state = value.getFloat32(4 * 6, true);
 
       callback(emgHelper as Readonly<MyoModFilteredEmgData>, counter, value);
     };
-    
+
     this.filteredEmgCharacteristic.addEventListener(
       "characteristicvaluechanged",
       listener
