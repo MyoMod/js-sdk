@@ -8,9 +8,9 @@
             "type": "chrome",
             "request": "launch",
             "name": "Launch Chrome against localhost",
-            "url": "http://localhost:5173",
-            "webRoot": "${workspaceFolder}/examples/dpuCtrl",
-            "runtimeExecutable": "/snap/bin/chromium",
+            "url": "https://localhost:5173/js-sdk/",
+            "webRoot": "${workspaceFolder}/examples/grapher",
+            //"runtimeExecutable": "/snap/bin/chromium",
             "runtimeArgs": [
                 "-remote-debugging-port=9222",
                 "--user-data-dir=remote-debug-profile",
