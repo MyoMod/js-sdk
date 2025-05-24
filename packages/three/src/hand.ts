@@ -36,10 +36,14 @@ export class HandModel extends Group {
         }
         this.add(model);
         const update = createUpdateHandModel(model);
-        this.unsubscribeHandPose = myoMod.subscribeHandPose((pose) => {
-          this.visible = true;
-          update(pose);
-        });
+        myoMod
+          .subscribeHandPose((pose) => {
+            this.visible = true;
+            update(pose);
+          })
+          .then((unsubscribe) => {
+            this.unsubscribeHandPose = unsubscribe;
+          });
       }
     );
   }

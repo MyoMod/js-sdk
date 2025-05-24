@@ -72,13 +72,42 @@ export async function loadMyoMod(
     service.getCharacteristic("5f2d5b5b-2166-4d71-9b4a-ea719ce9777e"),
   ]);
 
-  return new MyoMod(
+  const myomod = new MyoMod(
     device,
     handPoseCharacteristic,
     emgDataCharacteristic,
     filteredEmgCharacteristic,
     asyncCtrlCharacteristic
   );
+  myomod.dpuControl;
+  return myomod;
+}
+
+async function subscribeCharacteristic(
+  characteristic: BluetoothRemoteGATTCharacteristic,
+  callback: (e: Event) => void,
+  name: string
+): Promise<() => void> {
+  characteristic.addEventListener("characteristicvaluechanged", callback);
+
+  return characteristic
+    .startNotifications()
+    .then(() => {
+      return () => {
+        console.log(`MyoMod: Stopping notifications for ${name}...`);
+        characteristic.stopNotifications().then(() => {
+          console.log(`MyoMod: Stopped notifications for ${name}`);
+          characteristic.removeEventListener(
+            "characteristicvaluechanged",
+            callback
+          );
+        });
+      };
+    })
+    .catch((error) => {
+      console.error("Error starting notifications for Hand Pose:", error);
+      throw error;
+    });
 }
 
 export type MyoModHandPose = {
@@ -151,15 +180,13 @@ export class DPUControlProtocol {
 
   constructor(
     private readonly characteristic: BluetoothRemoteGATTCharacteristic
-  ) {
-    this.setupNotifications();
-  }
+  ) {}
 
-  private async setupNotifications(): Promise<void> {
-    await this.characteristic.startNotifications();
-    this.characteristic.addEventListener(
-      "characteristicvaluechanged",
-      this.handleResponse.bind(this)
+  async setupNotifications(): Promise<void> {
+    await subscribeCharacteristic(
+      this.characteristic,
+      this.handleResponse.bind(this),
+      "DPU Control Protocol"
     );
   }
 
@@ -183,14 +210,42 @@ export class DPUControlProtocol {
       this.resolveResponse = resolve;
       this.rejectResponse = reject;
 
-      setTimeout(() => {
+      let hasRetried = false;
+
+      // Set up retry timeout
+      const retryTimeout = setTimeout(async () => {
         if (this.rejectResponse) {
-          this.rejectResponse(new Error("Command timed out"));
-          this.resolveResponse = null;
-          this.rejectResponse = null;
-          this.responsePromise = null;
+          console.log("Command did not receive response after 1s, retrying...");
+          hasRetried = true;
+
+          // Retry sending the command
+          try {
+            const data = this.encoder.encode(command);
+            await this.characteristic.writeValue(data);
+          } catch (err) {
+            console.error("Error during command retry:", err);
+          }
+
+          // Set final timeout after retry
+          setTimeout(() => {
+            if (this.rejectResponse) {
+              this.rejectResponse(new Error("Command timed out after retry"));
+              this.resolveResponse = null;
+              this.rejectResponse = null;
+              this.responsePromise = null;
+            }
+          }, 4000); // Wait 4 more seconds after retry (5s total)
         }
-      }, 5000);
+      }, 1000);
+
+      // Clear retry timeout when command completes
+      const originalResolve = this.resolveResponse;
+      this.resolveResponse = (value: string) => {
+        clearTimeout(retryTimeout);
+        if (originalResolve) {
+          originalResolve(value);
+        }
+      };
     });
 
     const data = this.encoder.encode(command);
@@ -372,7 +427,7 @@ export class DPUControlProtocol {
     return data;
   }
 
-  async getBatteryState(): Promise<{ capacity: number; charging: boolean }> {
+  async getBatteryState(): Promise<{ voltage: number; capacity: number; charging: boolean }> {
     const [status, data] = await this.executeCommand("$b");
     if (status !== DPUControlStatus.SUCCESS) {
       throw new Error(
@@ -380,10 +435,18 @@ export class DPUControlProtocol {
       );
     }
 
-    const [capacityStr, chargingStr] = data.split(" ");
+    const [voltageStr, chargingStr] = data.split(" ");
     return {
-      capacity: parseInt(capacityStr),
+      voltage: parseInt(voltageStr) / 1000,
       charging: chargingStr === "1",
+      capacity: Math.max(
+        0,
+        // Map battery voltage from 3500-4200mV range to 0-100% capacity
+        Math.min(
+          100,
+          Math.round((parseInt(voltageStr) - 3500) / (4200 - 3500) * 100)
+        )
+      ),
     };
   }
 
@@ -425,12 +488,15 @@ export class DPUControlProtocol {
     };
   }
 
-  async destroy(): Promise<void> {
-    await this.characteristic.stopNotifications();
-    this.characteristic.removeEventListener(
-      "characteristicvaluechanged",
-      this.handleResponse.bind(this)
-    );
+  destroy(): Promise<void> {
+    console.log(`MyoMod: Stopping notifications for DPU Control Protocol...`);
+    return this.characteristic.stopNotifications().then(() => {
+      console.log(`MyoMod: Stopped notifications for DPU Control Protocol`);
+      this.characteristic.removeEventListener(
+        "characteristicvaluechanged",
+        this.handleResponse.bind(this)
+      );
+    });
   }
 }
 
@@ -458,6 +524,17 @@ export class MyoMod {
   get dpuControl(): DPUControlProtocol {
     if (!this._dpuControl) {
       this._dpuControl = new DPUControlProtocol(this.asyncCtrlCharacteristic);
+      this._dpuControl
+        .setupNotifications()
+        .then(() => {
+          console.log("DPU Control Protocol notifications set up");
+        })
+        .catch((error) => {
+          console.error(
+            "Error setting up DPU Control Protocol notifications:",
+            error
+          );
+        });
     }
     return this._dpuControl;
   }
@@ -470,33 +547,6 @@ export class MyoMod {
         } but got ${counter}`
       );
     }
-  }
-
-  async subscribeCharacteristic(
-    characteristic: BluetoothRemoteGATTCharacteristic,
-    callback: (e: Event) => void,
-    name: string
-  ): Promise<() => void> {
-    characteristic.addEventListener("characteristicvaluechanged", callback);
-
-    return characteristic
-      .startNotifications()
-      .then(() => {
-        return () => {
-          console.log(`MyoMod: Stopping notifications for ${name}...`);
-          characteristic.stopNotifications().then(() => {
-            console.log(`MyoMod: Stopped notifications for ${name}`);
-            characteristic.removeEventListener(
-              "characteristicvaluechanged",
-              callback
-            );
-          });
-        };
-      })
-      .catch((error) => {
-        console.error("Error starting notifications for Hand Pose:", error);
-        throw error;
-      });
   }
 
   subscribeHandPose(
@@ -523,7 +573,7 @@ export class MyoMod {
 
       callback(this.poseHelper as Readonly<MyoModHandPose>, value);
     };
-    return this.subscribeCharacteristic(
+    return subscribeCharacteristic(
       this.handPoseCharacteristic,
       listener,
       "Hand Pose"
@@ -584,7 +634,7 @@ export class MyoMod {
       callback(emgHelper as Readonly<MyoModEmgData>, counter, value);
     };
 
-    return this.subscribeCharacteristic(
+    return subscribeCharacteristic(
       this.emgDataCharacteristic,
       listener,
       "Raw EMG"
@@ -629,7 +679,7 @@ export class MyoMod {
       callback(emgHelper as Readonly<MyoModFilteredEmgData>, counter, value);
     };
 
-    return this.subscribeCharacteristic(
+    return subscribeCharacteristic(
       this.filteredEmgCharacteristic,
       listener,
       "Filtered EMG"
