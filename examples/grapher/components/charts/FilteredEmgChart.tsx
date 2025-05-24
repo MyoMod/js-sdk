@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import uPlot from "uplot";
 import { useFilteredEmgStore } from "../../store";
 
@@ -6,11 +6,20 @@ export function FilteredEmgChart({ samplingRate }: { samplingRate: number }) {
   const { history, packetCount } = useFilteredEmgStore();
   const chartRef = useRef<HTMLDivElement>(null);
   const uPlotRef = useRef<uPlot | null>(null);
+  // Add state for scaling mode
+  const [useIndividualScaling, setUseIndividualScaling] = useState(false);
   
+  // Effect to recreate chart when scaling mode changes
   useEffect(() => {
-    if (!chartRef.current || uPlotRef.current) return;
+    // Destroy previous chart if it exists
+    if (uPlotRef.current) {
+      uPlotRef.current.destroy();
+      uPlotRef.current = null;
+    }
     
-    console.log("Creating uPlot instance for Filtered EMG data");
+    if (!chartRef.current) return;
+    
+    console.log(`Creating uPlot instance for Filtered EMG data with ${useIndividualScaling ? 'individual' : 'common'} scaling`);
     
     const initialWidth = Math.max(window.innerWidth - 40, 600);
     const initialHeight = Math.max(Math.min(window.innerHeight * 0.3, 300), 200);
@@ -21,28 +30,45 @@ export function FilteredEmgChart({ samplingRate }: { samplingRate: number }) {
       scales: {
         x: {
           time: false,
-          // Set default range to show last 10 seconds of data
           range: [-10, 0],
-          // Keep 0 (the present) at the right edge
           auto: false
         },
-        y: {
-          auto: true,
-        }
+        // Define scales based on scaling mode
+        y: { auto: true },
+        ...(useIndividualScaling ? {
+          y1: { auto: true },
+          y2: { auto: true },
+          y3: { auto: true },
+          y4: { auto: true },
+          y5: { auto: true },
+          y6: { auto: true },
+        } : {})
       },
       legend: {
         show: true,
       },
       series: [
         { label: "Time (s)", value: (self: any, rawValue: number | null) => rawValue == null ? '0.00' : rawValue.toFixed(2) },
-        { label: "Channel 1", stroke: "red", width: 2 },
-        { label: "Channel 2", stroke: "blue", width: 2 },
-        { label: "Channel 3", stroke: "green", width: 2 },
-        { label: "Channel 4", stroke: "orange", width: 2 },
-        { label: "Channel 5", stroke: "purple", width: 2 },
-        { label: "Channel 6", stroke: "cyan", width: 2 },
+        { label: "Channel 1", stroke: "red", width: 2, scale: useIndividualScaling ? "y1" : "y" },
+        { label: "Channel 2", stroke: "blue", width: 2, scale: useIndividualScaling ? "y2" : "y" },
+        { label: "Channel 3", stroke: "green", width: 2, scale: useIndividualScaling ? "y3" : "y" },
+        { label: "Channel 4", stroke: "orange", width: 2, scale: useIndividualScaling ? "y4" : "y" },
+        { label: "Channel 5", stroke: "purple", width: 2, scale: useIndividualScaling ? "y5" : "y" },
+        { label: "Channel 6", stroke: "cyan", width: 2, scale: useIndividualScaling ? "y6" : "y" },
         { label: "State", stroke: "black", width: 2, show: false },
         { label: "Counter", stroke: "gray", width: 2, show: false },
+      ],
+      axes: [
+        { scale: "x" }, // x-axis
+        // { scale: "y" }, // common y-axis
+        // ...(useIndividualScaling ? [
+        //   { scale: "y1", values: (self, ticks) => ticks.map(v => v.toFixed(1)), side: 3, grid: {show: false}, show: true },
+        //   { scale: "y2", values: (self, ticks) => ticks.map(v => v.toFixed(1)), side: 3, grid: {show: false}, show: true },
+        //   { scale: "y3", values: (self, ticks) => ticks.map(v => v.toFixed(1)), side: 3, grid: {show: false}, show: true },
+        //   { scale: "y4", values: (self, ticks) => ticks.map(v => v.toFixed(1)), side: 3, grid: {show: false}, show: true },
+        //   { scale: "y5", values: (self, ticks) => ticks.map(v => v.toFixed(1)), side: 3, grid: {show: false}, show: true },
+        //   { scale: "y6", values: (self, ticks) => ticks.map(v => v.toFixed(1)), side: 3, grid: {show: false}, show: true },
+        // ] : [])
       ]
     };
     
@@ -73,7 +99,7 @@ export function FilteredEmgChart({ samplingRate }: { samplingRate: number }) {
         uPlotRef.current = null;
       }
     };
-  }, []);
+  }, [useIndividualScaling]); // Add useIndividualScaling as dependency
   
   useEffect(() => {
     if (!uPlotRef.current || history.length === 0 || packetCount === null) return;
@@ -109,7 +135,31 @@ export function FilteredEmgChart({ samplingRate }: { samplingRate: number }) {
   
   return (
     <div style={{ marginTop: 10, width: '100%' }}>
-      <div style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 8 }}>Filtered EMG Data:</div>
+      <div style={{ 
+        fontSize: 16, 
+        fontWeight: 'bold', 
+        marginBottom: 8,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between'
+      }}>
+        <span>Filtered EMG Data:</span>
+        <label style={{
+          display: 'flex',
+          alignItems: 'center',
+          fontSize: 14,
+          fontWeight: 'normal',
+          cursor: 'pointer'
+        }}>
+          <input 
+            type="checkbox"
+            checked={useIndividualScaling}
+            onChange={() => setUseIndividualScaling(prev => !prev)}
+            style={{ marginRight: 8 }}
+          />
+          Individual Channel Scaling  
+        </label>
+      </div>
       <div ref={chartRef} style={{ margin: '0 auto' }} />
     </div>
   );
