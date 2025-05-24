@@ -10,7 +10,7 @@ export function useMyoModData(myoMod: MyoMod) {
   const [configChecksum, setConfigChecksum] = useState<string | null>(null);
   const [firmwareChecksum, setFirmwareChecksum] = useState<string | null>(null);
   const [firmwareVersion, setFirmwareVersion] = useState<string | null>(null);
-  const [batteryState, setBatteryState] = useState<{capacity: number, charging: boolean} | null>(null);
+  const [batteryState, setBatteryState] = useState<{capacity: number, charging: boolean, voltage: number} | null>(null);
   const [devicesList, setDevicesList] = useState<{devicesCount: number, jsonData: string, devicesHash: string} | null>(null);
   const [configChunk, setConfigChunk] = useState<{chunksCount: number, jsonData: string} | null>(null);
   const [completeConfig, setCompleteConfig] = useState<string | null>(null);

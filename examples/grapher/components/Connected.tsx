@@ -1,15 +1,7 @@
-import { Suspense, useEffect, useState } from "react";
-import { Canvas } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
+import { useEffect, useState } from "react";
 import { suspend } from "suspend-react";
 import { loadMyoMod } from "@myomod/three";
 import "uplot/dist/uPlot.min.css";
-
-import { Hand } from "./Hand";
-import { EmgChart, FilteredEmgChart } from "./charts";
-import { DownloadButton } from "./DownloadButton";
-import { BatteryStatusDisplay } from "./BatteryStatusDisplay";
-import { SamplingControls } from "./SamplingControls";
 import { EmgGrapher } from "./EmgGrapher";
 import { DpuControlApp } from "./DpuControlApp";
 
@@ -21,7 +13,7 @@ export function Connected() {
     return <div className="fullscreen-container">Failed to load MyoMod</div>;
   }
   const [activeView, setActiveView] = useState<"emgGrapher" | "dpuControl">(
-    "dpuControl"
+    "emgGrapher"
   );
   const [isFullscreen, setIsFullscreen] = useState(false);
 

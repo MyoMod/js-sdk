@@ -21,6 +21,7 @@ export type FilteredEmgHistory = {
 
 // Battery state type
 export type BatteryState = {
-  capacity: number;
+  voltage: number;
   charging: boolean;
+  capacity: number;
 } | null;
