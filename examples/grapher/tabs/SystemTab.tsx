@@ -8,7 +8,7 @@ interface SystemTabProps {
   isLoading: boolean;
   firmwareVersion: string | null;
   firmwareChecksum: string | null;
-  batteryState: {capacity: number, charging: boolean} | null;
+  batteryState: { capacity: number; charging: boolean; voltage: number } | null;
   handleGetFirmwareVersion: () => Promise<void>;
   handleGetFirmwareChecksum: () => Promise<void>;
   handleGetBatteryState: () => Promise<void>;
@@ -21,52 +21,53 @@ export function SystemTab({
   batteryState,
   handleGetFirmwareVersion,
   handleGetFirmwareChecksum,
-  handleGetBatteryState
+  handleGetBatteryState,
 }: SystemTabProps) {
   return (
     <div>
       <Card title="Firmware Information">
         <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
-          <button 
-            onClick={handleGetFirmwareVersion} 
+          <button
+            onClick={handleGetFirmwareVersion}
             disabled={isLoading}
             style={isLoading ? disabledButtonStyle : buttonStyle}
           >
             Get Firmware Version
           </button>
-          
-          <button 
-            onClick={handleGetFirmwareChecksum} 
+
+          <button
+            onClick={handleGetFirmwareChecksum}
             disabled={isLoading}
             style={isLoading ? disabledButtonStyle : buttonStyle}
           >
             Get Firmware Checksum
           </button>
         </div>
-        
+
         {firmwareVersion && (
           <InfoValue label="Firmware Version" value={firmwareVersion} />
         )}
-        
+
         {firmwareChecksum && (
           <InfoValue label="Firmware Checksum" value={firmwareChecksum} />
         )}
       </Card>
-      
+
       <Card title="Battery Status">
         <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-          <button 
-            onClick={handleGetBatteryState} 
+          <button
+            onClick={handleGetBatteryState}
             disabled={isLoading}
             style={isLoading ? disabledButtonStyle : buttonStyle}
           >
             {isLoading ? "Loading..." : "Refresh Battery Status"}
           </button>
-          
+
           {batteryState && (
-            <BatteryDisplay 
-              capacity={batteryState.capacity} 
-              charging={batteryState.charging} 
+            <BatteryDisplay
+              capacity={batteryState.capacity}
+              charging={batteryState.charging}
+              voltage={batteryState.voltage}
             />
           )}
         </div>
