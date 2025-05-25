@@ -26,6 +26,7 @@ export function useMyoModData(myoMod: MyoMod) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [setAllConfigProgress, setSetAllConfigProgress] = useState<number>(0); // Track progress for setting all configuration chunks
   
   // Initial loading state
   const [isInitializing, setIsInitializing] = useState(true);
@@ -171,6 +172,51 @@ export function useMyoModData(myoMod: MyoMod) {
       }
     } catch (err) {
       console.error("Error retrieving all configuration chunks:", err);
+    }
+  };
+
+  // Internal version of handleSetAllConfigurationChunks that doesn't update UI loading state
+  const handleSetAllConfigurationChunksInternal = async (configJson: string) => {
+    try {
+      // Prepare the JSON string - remove all whitespace      
+      const parsedJson = JSON.parse(configJson);
+      const compactJson = JSON.stringify(parsedJson);
+
+      // Calculate chunk size - 256B max per chunk
+      const chunkSize = 256; // slightly under 4KB to be safe
+      const totalChunks = Math.ceil(compactJson.length / chunkSize);
+      
+      // Split the JSON into chunks
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * chunkSize;
+        const end = Math.min((i + 1) * chunkSize, compactJson.length);
+        const chunkData = compactJson.substring(start, end);
+        
+        // Convert to base64
+        const base64ChunkData = btoa(chunkData);
+        
+        // Send the chunk
+        await myoMod.dpuControl.setConfigurationsChunk(i, base64ChunkData);
+        
+        // Update progress if there's a UI component showing it
+        setSetAllConfigProgress(Math.round(((i + 1) / totalChunks) * 100));
+      }
+      
+      // After sending all chunks, reload the configurations
+      await myoMod.dpuControl.reloadConfigurations();
+      
+      // Verify the new configuration by getting the checksum
+      const newChecksum = await myoMod.dpuControl.getConfigurationsChecksum();
+      setConfigChecksum(newChecksum);
+      
+      return {
+        success: true,
+        chunksCount: totalChunks,
+        newChecksum
+      };
+    } catch (err) {
+      console.error("Error setting all configuration chunks:", err);
+      throw err;
     }
   };
 
@@ -450,6 +496,28 @@ export function useMyoModData(myoMod: MyoMod) {
     }
   };
   
+  const handleSetAllConfigurationChunks = async (configJson: string) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      setSuccessMessage(null);
+      setSetAllConfigProgress(0);
+      
+      const result = await handleSetAllConfigurationChunksInternal(configJson);
+      
+      setSuccessMessage(`Successfully uploaded all ${result.chunksCount} configuration chunks and reloaded configurations. New checksum: ${result.newChecksum}`);
+      
+      // Refresh the config after setting it
+      await handleGetAllConfigurationChunksInternal();
+      
+    } catch (err) {
+      setError(`Error setting all configuration chunks: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsLoading(false);
+      setSetAllConfigProgress(0);
+    }
+  };
+  
   // Special operations
   const handleReloadConfigurations = async () => {
     try {
@@ -496,6 +564,7 @@ export function useMyoModData(myoMod: MyoMod) {
     isInitializing,
     initProgress,
     initStep,
+    setAllConfigProgress,
     
     // Functions
     initializeData,
@@ -513,6 +582,7 @@ export function useMyoModData(myoMod: MyoMod) {
     handleGetConfigurationsChunk,
     handleGetAllConfigurationChunks,
     handleSetConfigurationsChunk,
+    handleSetAllConfigurationChunks,
     handleReloadConfigurations,
   };
 }

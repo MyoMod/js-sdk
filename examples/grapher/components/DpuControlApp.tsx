@@ -17,33 +17,58 @@ export function DpuControlApp({ myoMod }: DpuControlAppProps) {
   // Track mounting with useRef to prevent double initialization
   const mountedRef = useRef(false);
   const [activeTab, setActiveTab] = useState<string>("basics");
-  
+
   // Get shared state and handlers from custom hook
   const {
     // Data states
-    version, rtMode, activeConfigIndex, configChecksum, 
-    firmwareChecksum, firmwareVersion, batteryState,
-    devicesList, configChunk, completeConfig, completeDevices,
-    
+    version,
+    rtMode,
+    activeConfigIndex,
+    configChecksum,
+    firmwareChecksum,
+    firmwareVersion,
+    batteryState,
+    devicesList,
+    configChunk,
+    completeConfig,
+    completeDevices,
+
     // Input states
-    configIndexInput, setConfigIndexInput,
-    deviceIndexInput, setDeviceIndexInput,
-    chunkIndexInput, setChunkIndexInput,
-    chunkDataInput, setChunkDataInput,
-    
+    configIndexInput,
+    setConfigIndexInput,
+    deviceIndexInput,
+    setDeviceIndexInput,
+    chunkIndexInput,
+    setChunkIndexInput,
+    chunkDataInput,
+    setChunkDataInput,
+
     // UI states
-    isLoading, error, successMessage,
-    isInitializing, initProgress, initStep,
-    
+    isLoading,
+    error,
+    successMessage,
+    isInitializing,
+    initProgress,
+    initStep,
+
     // Handler functions
     initializeData,
-    handleGetVersion, handleGetRealTimeMode, handleSetRealTimeMode,
-    handleGetActiveConfigIndex, handleSetActiveConfigIndex,
-    handleGetConfigurationsChecksum, handleGetFirmwareChecksum,
-    handleGetFirmwareVersion, handleGetBatteryState,
-    handleListConnectedDevices, handleGetAllDevices,
-    handleGetConfigurationsChunk, handleGetAllConfigurationChunks,
-    handleSetConfigurationsChunk, handleReloadConfigurations
+    handleGetVersion,
+    handleGetRealTimeMode,
+    handleSetRealTimeMode,
+    handleGetActiveConfigIndex,
+    handleSetActiveConfigIndex,
+    handleGetConfigurationsChecksum,
+    handleGetFirmwareChecksum,
+    handleGetFirmwareVersion,
+    handleGetBatteryState,
+    handleListConnectedDevices,
+    handleGetAllDevices,
+    handleGetConfigurationsChunk,
+    handleGetAllConfigurationChunks,
+    handleSetAllConfigurationChunks,
+    handleSetConfigurationsChunk,
+    handleReloadConfigurations,
   } = useMyoModData(myoMod);
 
   // Initialization effect - runs once when component mounts
@@ -56,42 +81,50 @@ export function DpuControlApp({ myoMod }: DpuControlAppProps) {
 
     // Mark as mounted
     mountedRef.current = true;
-    
+
     // Initialize data
     initializeData();
-    
   }, []);
 
   return (
     <>
-      <div style={{
-        position: "absolute",
-        top: 20,
-        left: 20,
-        background: "#f8f9fa",
-        padding: 20,
-        borderRadius: 8,
-        boxShadow: "0 2px 10px rgba(0,0,0,0.15)",
-        zIndex: 100,
-        //maxWidth: "800px",
-        width: "90%",
-        maxHeight: "90vh",
-        overflow: "auto"
-      }}>
-        <h2 style={{ marginBottom: "20px", color: "#333", borderBottom: "2px solid #0066cc", paddingBottom: "10px" }}>
+      <div
+        style={{
+          position: "absolute",
+          top: 20,
+          left: 20,
+          background: "#f8f9fa",
+          padding: 20,
+          borderRadius: 8,
+          boxShadow: "0 2px 10px rgba(0,0,0,0.15)",
+          zIndex: 100,
+          //maxWidth: "800px",
+          width: "90%",
+          maxHeight: "90vh",
+          overflow: "auto",
+        }}
+      >
+        <h2
+          style={{
+            marginBottom: "20px",
+            color: "#333",
+            borderBottom: "2px solid #0066cc",
+            paddingBottom: "10px",
+          }}
+        >
           <span style={{ color: "#0066cc" }}>MyoMod</span> DPU Control
         </h2>
-        
+
         {isInitializing && (
-          <LoadingOverlay 
-            progress={initProgress} 
-            step={initStep} 
+          <LoadingOverlay
+            progress={initProgress}
+            step={initStep}
             error={error}
           />
         )}
-        
+
         <TabNavigation activeTab={activeTab} setActiveTab={setActiveTab} />
-        
+
         {activeTab === "basics" && (
           <BasicsTab
             isLoading={isLoading}
@@ -113,7 +146,7 @@ export function DpuControlApp({ myoMod }: DpuControlAppProps) {
             handleReloadConfigurations={handleReloadConfigurations}
           />
         )}
-        
+
         {activeTab === "config" && (
           <ConfigTab
             isLoading={isLoading}
@@ -126,9 +159,10 @@ export function DpuControlApp({ myoMod }: DpuControlAppProps) {
             handleGetConfigurationsChunk={handleGetConfigurationsChunk}
             handleSetConfigurationsChunk={handleSetConfigurationsChunk}
             handleGetAllConfigurationChunks={handleGetAllConfigurationChunks}
+            handleSetAllConfigurationChunks={handleSetAllConfigurationChunks}
           />
         )}
-        
+
         {activeTab === "system" && (
           <SystemTab
             isLoading={isLoading}
@@ -140,7 +174,7 @@ export function DpuControlApp({ myoMod }: DpuControlAppProps) {
             handleGetBatteryState={handleGetBatteryState}
           />
         )}
-        
+
         {activeTab === "devices" && (
           <DevicesTab
             isLoading={isLoading}
@@ -152,12 +186,9 @@ export function DpuControlApp({ myoMod }: DpuControlAppProps) {
             handleGetAllDevices={handleGetAllDevices}
           />
         )}
-        
+
         {!isInitializing && (successMessage || error) && (
-          <StatusMessage 
-            successMessage={successMessage} 
-            error={error}
-          />
+          <StatusMessage successMessage={successMessage} error={error} />
         )}
       </div>
     </>

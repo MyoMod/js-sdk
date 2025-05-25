@@ -32,6 +32,7 @@ interface ConfigTabProps {
   handleGetConfigurationsChunk: () => Promise<void>;
   handleSetConfigurationsChunk: () => Promise<void>;
   handleGetAllConfigurationChunks: () => Promise<void>;
+  handleSetAllConfigurationChunks: (configJson: string) => Promise<void>;
 }
 
 export function ConfigTab({
@@ -45,9 +46,11 @@ export function ConfigTab({
   handleGetConfigurationsChunk,
   handleSetConfigurationsChunk,
   handleGetAllConfigurationChunks,
+  handleSetAllConfigurationChunks,
 }: ConfigTabProps) {
   const [viewMode, setViewMode] = useState<"json" | "flow">("flow");
   const [configData, setConfigData] = useState<ConfigurationData>();
+  const [isSaving, setIsSaving] = useState<boolean>(false);
 
   // Update local configDataState when completeConfig has been read from device
   useEffect(() => {
@@ -61,6 +64,22 @@ export function ConfigTab({
     }
   }, [completeConfig]);
 
+  const handleSaveConfiguration = async () => {
+    if (!configData) return;
+
+    try {
+      setIsSaving(true);
+      // Create a JSON array with the current configuration
+      const configJson = JSON.stringify([configData]);
+      // Send the configuration to the device
+      await handleSetAllConfigurationChunks(configJson);
+    } catch (error) {
+      console.error("Error saving configuration:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div>
       <Card title="Complete Configuration">
@@ -72,7 +91,7 @@ export function ConfigTab({
             marginBottom: "12px",
           }}
         >
-          <div>
+          <div style={{ display: "flex", gap: "10px" }}>
             <button
               onClick={handleGetAllConfigurationChunks}
               disabled={isLoading}
@@ -80,6 +99,19 @@ export function ConfigTab({
             >
               {isLoading ? "Loading..." : "Load Complete Configuration"}
             </button>
+            {configData && (
+              <button
+                onClick={handleSaveConfiguration}
+                disabled={isLoading || isSaving}
+                style={
+                  isLoading || isSaving
+                    ? disabledButtonStyle
+                    : { ...buttonStyle, backgroundColor: "#4CAF50" }
+                }
+              >
+                {isSaving ? "Saving..." : "Save Configuration"}
+              </button>
+            )}
           </div>
           <div style={{ display: "flex", gap: "10px" }}>
             <button
