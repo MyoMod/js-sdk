@@ -64,11 +64,13 @@ export async function loadMyoMod(
     handPoseCharacteristic,
     emgDataCharacteristic,
     filteredEmgCharacteristic,
+    combinedEmgCharacteristic,
     asyncCtrlCharacteristic,
   ] = await Promise.all([
     service.getCharacteristic("5782a59c-fca9-4213-909f-0f88517c8fae"),
     service.getCharacteristic("9c54ed76-847e-4d51-84be-7cf02794de53"),
     service.getCharacteristic("36845417-f01b-4167-afa1-81b322238fe1"),
+    service.getCharacteristic("ab92c948-16ed-4ed2-b18e-d4c0a27808fc"),
     service.getCharacteristic("5f2d5b5b-2166-4d71-9b4a-ea719ce9777e"),
   ]);
 
@@ -77,6 +79,7 @@ export async function loadMyoMod(
     handPoseCharacteristic,
     emgDataCharacteristic,
     filteredEmgCharacteristic,
+    combinedEmgCharacteristic,
     asyncCtrlCharacteristic
   );
   myomod.dpuControl;
@@ -134,6 +137,11 @@ export type MyoModEmgData = {
 export type MyoModFilteredEmgData = {
   data: Float32Array;
   state: number;
+};
+
+export type MyoModCombinedEmgData = {
+  raw: MyoModEmgData;
+  filtered: MyoModFilteredEmgData;
 };
 
 // CRC32 utility for the DPU Control Protocol
@@ -506,10 +514,12 @@ export class MyoMod {
     pose: number;
     rawEmg: number;
     filteredEmg: number;
+    combinedEmg: number;
   } = {
     pose: -1,
     rawEmg: -1,
     filteredEmg: -1,
+    combinedEmg: -1,
   };
   private _dpuControl: DPUControlProtocol | null = null;
 
@@ -518,6 +528,7 @@ export class MyoMod {
     private readonly handPoseCharacteristic: BluetoothRemoteGATTCharacteristic,
     private readonly emgDataCharacteristic: BluetoothRemoteGATTCharacteristic,
     private readonly filteredEmgCharacteristic: BluetoothRemoteGATTCharacteristic,
+    private readonly combinedEmgCharacteristic: BluetoothRemoteGATTCharacteristic,
     private readonly asyncCtrlCharacteristic: BluetoothRemoteGATTCharacteristic
   ) {}
 
@@ -577,6 +588,86 @@ export class MyoMod {
       this.handPoseCharacteristic,
       listener,
       "Hand Pose"
+    );
+  }
+
+  subscribeCombinedEmgData(
+    callback: (
+      data: Readonly<MyoModCombinedEmgData>,
+      counter: number,
+      raw: DataView
+    ) => void
+  ): Promise<() => void> {
+    const combinedHelper: MyoModCombinedEmgData = {
+      raw: {
+        chnA: new Float32Array(15),
+        chnB: new Float32Array(15),
+        chnC: new Float32Array(15),
+        chnD: new Float32Array(15),
+        chnE: new Float32Array(15),
+        chnF: new Float32Array(15),
+      },
+      filtered: {
+        data: new Float32Array(6),
+        state: 0,
+      },
+    };
+
+    const listener = (e: Event) => {
+      const { value } = e.target as unknown as { value: DataView };
+
+      // The last byte is a one-byte counter
+      const counter = value.getUint8(value.byteLength - 1);
+
+      // Parse raw EMG data (6 channels * 15 samples * 4 bytes per float32 = 360 bytes)
+      const rawDataSize = 15;
+      const numChannels = 6;
+
+      for (let ch = 0; ch < numChannels; ch++) {
+        const channelArray =
+          ch === 0
+            ? combinedHelper.raw.chnA
+            : ch === 1
+            ? combinedHelper.raw.chnB
+            : ch === 2
+            ? combinedHelper.raw.chnC
+            : ch === 3
+            ? combinedHelper.raw.chnD
+            : ch === 4
+            ? combinedHelper.raw.chnE
+            : combinedHelper.raw.chnF;
+
+        for (let i = 0; i < rawDataSize; i++) {
+          const byteOffset = (ch * rawDataSize + i) * 4;
+          channelArray[i] = value.getFloat32(byteOffset, true);
+        }
+      }
+
+      // Parse filtered EMG data (6 channels + 1 state * 4 bytes per float32 = 28 bytes)
+      // Starts after raw data (360 bytes)
+      const filteredDataOffset = numChannels * rawDataSize * 4;
+      for (let i = 0; i < numChannels; i++) {
+        const byteOffset = filteredDataOffset + i * 4;
+        combinedHelper.filtered.data[i] = value.getFloat32(byteOffset, true);
+      }
+      combinedHelper.filtered.state = value.getFloat32(
+        filteredDataOffset + numChannels * 4,
+        true
+      );
+
+      // Check if the counter is correct
+      if (this.oldCounters.combinedEmg != -1) {
+        this.checkCounter(counter, this.oldCounters.combinedEmg, "Combined EMG");
+      }
+      this.oldCounters.combinedEmg = counter;
+
+      callback(combinedHelper as Readonly<MyoModCombinedEmgData>, counter, value);
+    };
+
+    return subscribeCharacteristic(
+      this.combinedEmgCharacteristic,
+      listener,
+      "Combined EMG"
     );
   }
 
