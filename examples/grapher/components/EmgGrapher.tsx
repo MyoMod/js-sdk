@@ -6,6 +6,7 @@ import {
   loadMyoMod,
   MyoModEmgData,
   MyoModFilteredEmgData,
+  MyoModCombinedEmgData,
 } from "@myomod/three";
 
 import {
@@ -30,6 +31,7 @@ interface DataStreamControls {
   subscribeToHandPose?: boolean;
   subscribeToRawEmg?: boolean;
   subscribeToFilteredEmg?: boolean;
+  subscribeToCombinedEmg?: boolean;
 }
 
 interface EmgGrapherProps {
@@ -52,11 +54,12 @@ export function EmgGrapher({ myoMod }: EmgGrapherProps) {
         navigator.userAgent
       );
 
-    // Show raw emg for desktop only
+    // Use combined EMG by default (most efficient)
     return {
       subscribeToHandPose: false,
-      subscribeToRawEmg: !isMobile,
-      subscribeToFilteredEmg: true,
+      subscribeToRawEmg: false,
+      subscribeToFilteredEmg: false,
+      subscribeToCombinedEmg: true,
     };
   });
 
@@ -212,18 +215,63 @@ export function EmgGrapher({ myoMod }: EmgGrapherProps) {
     let unsubscribeFunctions: {
       raw: (() => void) | undefined;
       filtered: (() => void) | undefined;
+      combined: (() => void) | undefined;
       pose: (() => void) | undefined;
     } = {
       raw: undefined,
       filtered: undefined,
+      combined: undefined,
       pose: undefined,
     };
 
     // Async function to handle subscriptions
     const setupSubscriptions = async () => {
       try {
-        // Subscribe to EMG data if enabled
-        if (dataStreams.subscribeToRawEmg) {
+        // Subscribe to Combined EMG data if enabled (most efficient - default)
+        if (dataStreams.subscribeToCombinedEmg) {
+          console.log("Subscribing to combined EMG...");
+          const combinedEmgUnsubscribe = await myoMod.subscribeCombinedEmgData(
+            (combined, counter, raw) => {
+              // Create deep copies of Float32Arrays for raw EMG data
+              const emgDeepCopy: MyoModEmgData = {
+                chnA: new Float32Array(combined.raw.chnA),
+                chnB: new Float32Array(combined.raw.chnB),
+                chnC: new Float32Array(combined.raw.chnC),
+                chnD: new Float32Array(combined.raw.chnD),
+                chnE: new Float32Array(combined.raw.chnE),
+                chnF: new Float32Array(combined.raw.chnF),
+              };
+
+              // Create deep copy for filtered EMG data
+              const filteredEmgDeepCopy: MyoModFilteredEmgData = {
+                data: new Float32Array(combined.filtered.data),
+                state: combined.filtered.state,
+              };
+
+              // Collect both raw and filtered data
+              emgDataRef.current.push({ emg: emgDeepCopy, counter, raw });
+              filteredEmgDataRef.current.push({
+                filteredEmg: filteredEmgDeepCopy,
+                counter,
+                raw,
+              });
+
+              // Limit buffer sizes
+              if (emgDataRef.current.length > 1000) {
+                emgDataRef.current = emgDataRef.current.slice(-1000);
+              }
+              if (filteredEmgDataRef.current.length > 1000) {
+                filteredEmgDataRef.current =
+                  filteredEmgDataRef.current.slice(-1000);
+              }
+            }
+          );
+          console.log("Subscribed to combined EMG");
+          unsubscribeFunctions.combined = combinedEmgUnsubscribe;
+        }
+
+        // Subscribe to EMG data if enabled (only if not using combined)
+        if (dataStreams.subscribeToRawEmg && !dataStreams.subscribeToCombinedEmg) {
           console.log("Subscribing to raw EMG...");
           const emgUnsubscribe = await myoMod.subscribeEmgData(
             (emg, counter, raw) => {
@@ -250,8 +298,8 @@ export function EmgGrapher({ myoMod }: EmgGrapherProps) {
           unsubscribeFunctions.raw = emgUnsubscribe;
         }
 
-        // Subscribe to filtered EMG data if enabled
-        if (dataStreams.subscribeToFilteredEmg) {
+        // Subscribe to filtered EMG data if enabled (only if not using combined)
+        if (dataStreams.subscribeToFilteredEmg && !dataStreams.subscribeToCombinedEmg) {
           console.log("Subscribing to filtered EMG...");
           const filteredEmgUnsubscribe = await myoMod.subscribeFilteredEmgData(
             (filteredEmg, counter, raw) => {
@@ -335,7 +383,33 @@ export function EmgGrapher({ myoMod }: EmgGrapherProps) {
         >
           <input
             type="checkbox"
-            checked={dataStreams.subscribeToFilteredEmg}
+            checked={dataStreams.subscribeToCombinedEmg || false}
+            onChange={() =>
+              setDataStreams((prev) => ({
+                ...prev,
+                subscribeToCombinedEmg: !prev.subscribeToCombinedEmg,
+                // Disable individual subscriptions when enabling combined
+                subscribeToRawEmg: prev.subscribeToCombinedEmg ? prev.subscribeToRawEmg : false,
+                subscribeToFilteredEmg: prev.subscribeToCombinedEmg ? prev.subscribeToFilteredEmg : false,
+              }))
+            }
+            style={{ marginRight: "8px" }}
+          />
+          <span>Combined EMG (Recommended)</span>
+        </label>
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            cursor: "pointer",
+            padding: "4px 0",
+            opacity: dataStreams.subscribeToCombinedEmg ? 0.5 : 1,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={dataStreams.subscribeToFilteredEmg || false}
+            disabled={dataStreams.subscribeToCombinedEmg}
             onChange={() =>
               setDataStreams((prev) => ({
                 ...prev,
@@ -352,11 +426,13 @@ export function EmgGrapher({ myoMod }: EmgGrapherProps) {
             alignItems: "center",
             cursor: "pointer",
             padding: "4px 0",
+            opacity: dataStreams.subscribeToCombinedEmg ? 0.5 : 1,
           }}
         >
           <input
             type="checkbox"
-            checked={dataStreams.subscribeToRawEmg}
+            checked={dataStreams.subscribeToRawEmg || false}
+            disabled={dataStreams.subscribeToCombinedEmg}
             onChange={() =>
               setDataStreams((prev) => ({
                 ...prev,
@@ -379,11 +455,11 @@ export function EmgGrapher({ myoMod }: EmgGrapherProps) {
           gap: "20px",
         }}
       >
-        {/* Only show charts if their visibility is toggled on */}
-        {dataStreams.subscribeToFilteredEmg && (
+        {/* Show charts if their visibility is toggled on OR if combined EMG is enabled */}
+        {(dataStreams.subscribeToFilteredEmg || dataStreams.subscribeToCombinedEmg) && (
           <FilteredEmgChart samplingRate={filteredEmgSamplingRate} />
         )}
-        {dataStreams.subscribeToRawEmg && (
+        {(dataStreams.subscribeToRawEmg || dataStreams.subscribeToCombinedEmg) && (
           <EmgChart samplingRate={emgSamplingRate} />
         )}
       </div>
