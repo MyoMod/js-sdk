@@ -5,3 +5,4 @@ package-lock.json
 .idea
 examples/grapher/remote-debug-profile/
 examples/dpuCtrl/remote-debug-profile/
+examples/bleTester/remote-debug-profile/
