@@ -133,6 +133,26 @@
         "ID": "OnboardEMG",
         "amplification": 1
       }
+    },
+    {
+      "name": "Button",
+      "type": "Embed' Btn",
+      "example_id": "ExampleButton",
+      "description": "Physical button input for user interaction",
+      "inputs": [],
+      "outputs": [
+        {
+          "number": 1,
+          "type": "bool",
+          "name": "Button State",
+          "description": "Current state of the button (pressed or not pressed)"
+        }
+      ],
+      "options": {},
+      "example": {
+        "type": "Embed' Btn",
+        "ID": "OnboardButton"
+      }
     }
   ],
 
@@ -195,6 +215,12 @@
           "name": "Raw EMG",
           "names": ["A", "B", "C", "D", "E", "F"],
           "description": "Raw EMG data channels for filtering"
+        },
+        {
+          "number": 1,
+          "type": "bool",
+          "name": "Reset Filter",
+          "description": "Set high to reset the adaptive filter state"
         }
       ],
       "outputs": [
@@ -215,6 +241,50 @@
       "options": {},
       "example": {
         "type": "AdaptiveEMGFiltNode"
+      }
+    },
+    {
+      "name": "LEDStateNode",
+      "type": "LEDStateNode",
+      "example_id": "",
+      "description": "Controls LED color based on filter state and BLE connection status",
+      "inputs": [
+        {
+          "number": 1,
+          "type": "float32",
+          "name": "Filter State",
+          "description": "Current state of the filter"
+        },
+        {
+          "number": 1,
+          "type": "bool",
+          "name": "BLE Connected",
+          "description": "Bluetooth connection status"
+        }
+      ],
+      "outputs": [
+        {
+          "number": 1,
+          "type": "float32",
+          "name": "R",
+          "description": "Red color channel output"
+        },
+        {
+          "number": 1,
+          "type": "float32",
+          "name": "G",
+          "description": "Green color channel output"
+        },
+        {
+          "number": 1,
+          "type": "float32",
+          "name": "B",
+          "description": "Blue color channel output"
+        }
+      ],
+      "options": {},
+      "example": {
+        "type": "LEDStateNode"
       }
     }
   ]
