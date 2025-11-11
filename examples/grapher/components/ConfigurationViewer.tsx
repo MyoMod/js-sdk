@@ -396,6 +396,87 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
     [configData, onConfigChange]
   );
 
+  // Handle node deletions
+  const onNodesDelete = useCallback(
+    (nodesToDelete: Node[]) => {
+      if (!configData || !onConfigChange) return;
+
+      // Create a deep clone of the config data to avoid direct mutation
+      const updatedConfig = JSON.parse(JSON.stringify(configData));
+
+      // Collect node indices to delete for each array type
+      const indicesToDelete = {
+        embeddedDeviceNodes: [] as number[],
+        deviceNodes: [] as number[],
+        algorithmicNodes: [] as number[],
+      };
+
+      nodesToDelete.forEach((node) => {
+        const nodeId = node.id;
+        
+        // Determine which array the node belongs to based on its ID prefix
+        if (nodeId.startsWith("e")) {
+          // Embedded device node
+          const nodeIndex = parseInt(nodeId.substring(1));
+          indicesToDelete.embeddedDeviceNodes.push(nodeIndex);
+        } else if (nodeId.startsWith("d")) {
+          // Device node
+          const nodeIndex = parseInt(nodeId.substring(1));
+          indicesToDelete.deviceNodes.push(nodeIndex);
+        } else if (nodeId.startsWith("a")) {
+          // Algorithmic node
+          const nodeIndex = parseInt(nodeId.substring(1));
+          indicesToDelete.algorithmicNodes.push(nodeIndex);
+        }
+      });
+
+      // Sort indices in descending order so we delete from the end first
+      // This prevents index shifting issues
+      indicesToDelete.embeddedDeviceNodes.sort((a, b) => b - a);
+      indicesToDelete.deviceNodes.sort((a, b) => b - a);
+      indicesToDelete.algorithmicNodes.sort((a, b) => b - a);
+
+      // Delete nodes from arrays
+      indicesToDelete.embeddedDeviceNodes.forEach(index => {
+        updatedConfig.embeddedDeviceNodes.splice(index, 1);
+      });
+      indicesToDelete.deviceNodes.forEach(index => {
+        updatedConfig.deviceNodes.splice(index, 1);
+      });
+      indicesToDelete.algorithmicNodes.forEach(index => {
+        updatedConfig.algorithmicNodes.splice(index, 1);
+      });
+
+      // Remove any links that connect to the deleted nodes
+      const deletedNodeIds = nodesToDelete.map(node => node.id);
+      const newLinks = { ...updatedConfig.links };
+      Object.keys(newLinks).forEach((targetPort) => {
+        const sourcePort = newLinks[targetPort];
+        const [targetNodeId] = targetPort.split(":");
+        const [sourceNodeId] = sourcePort.split(":");
+        
+        // Remove links if either source or target node matches any deleted node
+        if (deletedNodeIds.includes(targetNodeId) || deletedNodeIds.includes(sourceNodeId)) {
+          delete newLinks[targetPort];
+        }
+      });
+      updatedConfig.links = newLinks;
+
+      // Remove position data for the deleted nodes
+      if (updatedConfig.positions) {
+        deletedNodeIds.forEach(nodeId => {
+          if (updatedConfig.positions[nodeId]) {
+            delete updatedConfig.positions[nodeId];
+          }
+        });
+      }
+
+      // Send updated configuration to parent component
+      onConfigChange(updatedConfig);
+    },
+    [configData, onConfigChange]
+  );
+
   const onNodeMoved = useCallback(
     (event: any, node: Node) => {
       if (!configData || !onConfigChange) return;
@@ -774,7 +855,7 @@ export const ConfigurationViewer: React.FC<ConfigurationViewerProps> = ({
           onReconnect={onConnect}
           onEdgesDelete={onEdgesDelete}
           onNodeDragStop={onNodeMoved}
-          onNodesDelete={() => {}}
+          onNodesDelete={onNodesDelete}
           nodeTypes={nodeTypes}
           fitView
           attributionPosition="bottom-left"
@@ -1089,9 +1170,6 @@ const NodeCategorySection = ({
                 alignItems: "center",
                 gap: "8px",
                 color: "#333",
-                "&:hover": {
-                  backgroundColor: "#f0f0f0",
-                },
               }}
               onClick={() => onSelect(node.type, category)}
               onMouseOver={(e) => {
